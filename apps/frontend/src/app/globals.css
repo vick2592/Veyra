@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+:root {
+  --ink: #17211b;
+  --muted: #66746a;
+  --paper: #f4f1e8;
+  --mint: #b7e4c7;
+  --lime: #d9f26a;
+  --line: rgba(23, 33, 27, 0.14);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 12% 12%, rgba(183, 228, 199, 0.72), transparent 28rem),
+    linear-gradient(135deg, #f7f3e9 0%, var(--paper) 52%, #dcebdc 100%);
+  color: var(--ink);
+  font-family: Georgia, 'Times New Roman', serif;
+}
