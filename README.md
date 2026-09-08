@@ -1,49 +1,70 @@
-# Veyra 🔐
+# Veyra
 
-> **Secure AI Agent Infrastructure gated by World ID and Ledger Key Ring Protocol.**
+> Secure AI agent infrastructure gated by World ID Face Auth and Ledger Key Ring custody.
 
-Veyra is a headless broker that allows AI agents to securely utilize API keys and secrets without ever holding them in plaintext. By combining Ledger's hardware-backed Key Ring with World ID's Face Auth, Veyra ensures that autonomous agents cannot execute sensitive capabilities without explicit, human-verified authorization.
+Veyra is a capability broker that lets an AI agent request sensitive work without holding raw API keys. A human completes World ID Face Auth before the broker verifies the proof, retrieves an allowlisted secret through Ledger Key Ring, and performs the agent-provider request.
 
-**🏆 Built for ETHOnline 2026**
-* **Ledger Track:** AI Agents x Ledger (Headless Host & Secret Broker)
-* **World Track:** SelfieCheck & Face Auth Integration
+## Status
 
----
+The Web2 application is successfully scaffolded and built. The repository contains an independently installable Next.js frontend and Express backend, plus a separate Web3 workspace for blockchain packages and contracts.
 
-## 📖 The Problem & Solution
+## Architecture
 
-**The Problem:** AI agents require API keys to execute tasks, but deploying these secrets to cloud environments, CI runners, or directly to the agent exposes them to severe leakage and Sybil risks. 
-**The Solution:** Veyra shifts secret management entirely off the agent. 
+```text
+apps/
+	frontend/  Next.js App Router gate, port 3000
+	backend/   Express broker API, port 3001
+blockchain/  Web3 packages, contracts, and tooling
+```
 
-1. **Vaulted at Rest:** Secrets are encrypted under a hierarchical leaf key derived from a Ledger Secure Element using the Ledger Key Ring Protocol (LKRP). 
-2. **Gated by Liveness:** When an agent needs to act, execution halts until the user completes a World ID Face Auth (Selfie Check) to prove they are physically present, stopping bot-driven attacks.
-3. **Headless Decryption:** Upon ZK-proof verification, the Veyra broker headlessly decrypts the keys into memory, executes the task, and instantly scrubs the key from RAM.
+### Request flow
 
----
+1. The frontend opens `IDKitWidget` with the `execute-agent` action and strict Orb verification.
+2. After Face Auth succeeds, it sends `proof`, `merkle_root`, `nullifier_hash`, `verification_level`, and `action` to the backend.
+3. The backend verifies the proof with the Worldcoin Developer Portal.
+4. The backend uses `wallet-cli` through `execFile` to decrypt the Ledger Key Ring into a private temporary directory.
+5. The allowlisted key is read in memory, the temporary plaintext is removed, and the mock provider request is returned to the frontend.
 
-## 🏗️ Architecture
+## Prerequisites
 
-Veyra operates as a multi-tenant capability broker:
+- Node.js 22 or newer
+- A World ID Developer Portal app ID
+- `@ledgerhq/wallet-cli` installed globally for real keyring execution
+- A provisioned Ledger Key Ring and encrypted `secrets.enc` file for real secret access
 
-* **Frontend (Next.js):** Uses `@worldcoin/idkit` to trigger a Face Auth verification when an agent requests a capability.
-* **Backend (Node.js/Express):** Verifies the World ID ZK-proof against the Developer Portal.
-* **The Key Ring (wallet-cli):** Spawns `wallet-cli ring decrypt` as a child process. Because the server is an authorized member of the Key Ring, it decrypts the `secrets.enc` file headlessly over the network—requiring no physical USB connection at runtime.
+## Run Locally
 
----
+### Backend
 
-## 🛠️ Prerequisites
-
-* Node.js (v18+)
-* A physical **Ledger Device** (for initial vault provisioning only)
-* `@ledgerhq/wallet-cli` installed globally (`npm i -g @ledgerhq/wallet-cli`)
-* A **World ID Developer Portal** account and App ID
-
----
-
-## 🚀 Quick Start (Local Admin Setup)
-
-### 1. Provision the Key Ring
-Plug in your Ledger device, open the Ledger app, and provision your local machine as an authorized Key Ring member:
 ```bash
-# Provide a custom password to secure the local trustchain
-WALLET_PASS="your_secure_password" wallet-cli ring init
+cd apps/backend
+npm install
+cp .env.example .env
+# Set WORLD_APP_ID, WORLD_ACTION, and WALLET_PASS in .env
+npm run dev
+```
+
+The Express backend listens on `http://localhost:3001`.
+
+### Frontend
+
+```bash
+cd apps/frontend
+npm install
+cp .env.example .env.local
+# Set NEXT_PUBLIC_WORLD_ID_APP_ID in .env.local
+npm run dev
+```
+
+The Next.js frontend listens on `http://localhost:3000` and calls `http://localhost:3001` through `NEXT_PUBLIC_BACKEND_URL`.
+
+## Validation Commands
+
+```bash
+cd apps/backend && npm run typecheck && npm test && npm run build
+cd apps/frontend && npm run typecheck && npm run build
+```
+
+## Web3 Workspace
+
+The `blockchain/` directory is separate from the Web2 apps. It contains the Web3 packages, smart contracts, and blockchain-specific workspace configuration. Changes to blockchain packages do not require joining or modifying the independent npm projects under `apps/`.
