@@ -19,11 +19,12 @@ blockchain/  Web3 packages, contracts, and tooling
 
 ### Request flow
 
-1. The frontend opens `IDKitWidget` with the `execute-agent` action and strict Orb verification.
-2. After Face Auth succeeds, it sends `proof`, `merkle_root`, `nullifier_hash`, `verification_level`, and `action` to the backend.
-3. The backend verifies the proof with the Worldcoin Developer Portal.
-4. The backend uses `wallet-cli` through `execFile` to decrypt the Ledger Key Ring into a private temporary directory.
-5. The allowlisted key is read in memory, the temporary plaintext is removed, and the mock provider request is returned to the frontend.
+1. The frontend requests a short-lived RP signature from `POST /api/world-id/sign`.
+2. The frontend builds an `rp_context` and opens `IDKitRequestWidget` with the `execute-agent` action and `selfieCheckLegacy()` preset.
+3. After World ID returns, the frontend sends `{ rp_id, idkitResponse }` unchanged to the backend.
+4. The backend forwards the complete IDKit response to the World ID 4.0 verification endpoint.
+5. Only after a successful verification response does the backend use `wallet-cli` through `execFile` to decrypt the Ledger Key Ring into a private temporary directory.
+6. The allowlisted key is read in memory, the temporary plaintext is removed, and the mock provider request is returned to the frontend.
 
 ## Prerequisites
 
@@ -40,7 +41,7 @@ blockchain/  Web3 packages, contracts, and tooling
 cd apps/backend
 npm install
 cp .env.example .env
-# Set WORLD_APP_ID, WORLD_ACTION, and WALLET_PASS in .env
+# Set WORLD_ID_APP_ID, WORLD_ID_RP_ID, WORLD_ID_SIGNING_KEY, WORLD_ACTION, and WALLET_PASS in .env
 npm run dev
 ```
 
@@ -52,7 +53,7 @@ The Express backend listens on `http://localhost:3001`.
 cd apps/frontend
 npm install
 cp .env.example .env.local
-# Set NEXT_PUBLIC_WORLD_ID_APP_ID in .env.local
+# Set NEXT_PUBLIC_WORLD_ID_APP_ID and NEXT_PUBLIC_WORLD_ID_RP_ID in .env.local
 npm run dev
 ```
 
