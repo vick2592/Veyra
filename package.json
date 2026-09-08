@@ -1,0 +1,23 @@
+{
+  "name": "veyra",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Veyra — agent capability broker. Agents borrow scoped, short-lived capabilities instead of holding secrets.",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@11.24.0",
+  "scripts": {
+    "build": "pnpm -r --filter './packages/*' build",
+    "typecheck": "pnpm -r --filter './packages/*' typecheck",
+    "test": "pnpm -r --filter './packages/*' test",
+    "stub": "pnpm --filter @veyra/broker stub",
+    "dev": "pnpm --filter @veyra/broker dev",
+    "migrate": "pnpm --filter @veyra/broker migrate",
+    "contracts:build": "forge build --root packages/contracts",
+    "contracts:test": "forge test --root packages/contracts -vv"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

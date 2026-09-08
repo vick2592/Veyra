@@ -1,0 +1,31 @@
+# secrets — never commit
+.env
+.env.*
+!.env.example
+
+# node
+node_modules/
+dist/
+*.tsbuildinfo
+.pnpm-store/
+
+# next / vercel
+.next/
+.vercel/
+out/
+
+# foundry
+packages/contracts/out/
+packages/contracts/cache/
+packages/contracts/broadcast/
+# packages/contracts/lib/ is a git submodule (forge-std) — tracked, not ignored
+
+# the graph
+subgraph/generated/
+subgraph/build/
+
+# local keys & scratch
+*.pem
+keys/
+tmp/
+.DS_Store
