@@ -162,6 +162,7 @@ export default function Home() {
               app_id={worldAppId as `app_${string}`}
               action="execute-agent"
               rp_context={rpContext}
+              environment="staging"
               allow_legacy_proofs={true}
               preset={selfieCheckLegacy()}
               handleVerify={handleVerify}
