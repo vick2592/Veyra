@@ -1,0 +1,4 @@
+# Foundry build output — scoped here so the root .gitignore stays untouched
+out/
+cache/
+broadcast/

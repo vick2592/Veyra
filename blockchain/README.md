@@ -3,10 +3,9 @@
 The on-chain audit mirror for the Veyra capability broker, plus the Foundry
 workspace that builds it.
 
-> **Status: designed, not yet implemented.** `packages/contracts/src/` is empty.
-> This document is the spec the contract and the subgraph are built from. The
-> Foundry toolchain is installed and verified — `forge build` and `forge test`
-> both run today.
+> **Status: implemented and green.** `CapabilityRegistry.sol` is written, with
+> 24 Foundry tests passing (including two fuzz properties at 256 runs each).
+> Not yet deployed — `REGISTRY_ADDRESS` is still unset.
 
 ## What goes on chain, and what deliberately does not
 
@@ -120,6 +119,9 @@ event RiskScoreUpdated(
     bytes32 evidenceRef,             // hash of the detector's reasoning
     uint64  updatedAt
 );
+
+event EmitterSet(address indexed emitter, bool allowed);
+event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 ```
 
 `RiskScoreUpdated` is the one that matters for The Graph submission. It closes
@@ -131,16 +133,26 @@ is visible as data rather than asserted in a slide.
 
 | Signature | Access | Purpose |
 | --- | --- | --- |
-| `recordDecisions(DecisionRecord[] calldata)` | emitter | batch-append decisions |
-| `recordUses(UseRecord[] calldata)` | emitter | batch-append capability uses |
-| `recordConfirmation(...)` | emitter | attach a human confirmation to a decision |
-| `registerResource(string calldata, uint8)` | owner | publish a resource name preimage |
-| `enrollPrincipal(bytes32, address, uint8)` | emitter | World ID enrollment |
-| `registerAgent(address, bytes32, bytes32)` | emitter | bind agent to principal |
+| `constructor(address initialEmitter)` | — | deployer becomes owner |
+| `recordDecisions(DecisionRecord[] calldata) returns (uint256)` | emitter | batch-append decisions; returns count newly written |
+| `recordUses(UseRecord[] calldata) returns (uint256)` | emitter | batch-append redemptions, keyed on `jti` |
+| `recordConfirmation(bytes32, address, uint8, bytes32, uint64)` | emitter | attach a human confirmation |
+| `registerResource(string calldata, uint8) returns (bytes32)` | owner | publish a resource name preimage |
+| `enrollPrincipal(bytes32, address, uint8, uint64)` | emitter | World ID enrollment |
+| `registerAgent(address, bytes32, bytes32, uint64)` | emitter | bind agent to principal |
 | `revokeAgent(address, uint16)` | **owner** | kill switch |
 | `reinstateAgent(address)` | **owner** | undo a revocation |
-| `updateRiskScore(address, uint16, uint8, uint8, bytes32)` | emitter | detector feedback |
+| `updateRiskScore(address, uint16, uint8, uint8, bytes32, uint64)` | emitter | detector feedback |
 | `setEmitter(address, bool)` | owner | rotate the emitter key |
+| `transferOwnership(address)` | owner | move the cold key |
+
+Every emitter-facing call takes an explicit `uint64` timestamp, because batched
+writes land long after the event they describe. Owner-driven calls
+(`revokeAgent`, `reinstateAgent`, `registerResource`) use `block.timestamp`, since
+those happen interactively rather than through the batch queue.
+
+`revokeAgent` and `reinstateAgent` are idempotent — repeating one is a silent
+no-op, not a revert, so a retried incident-response script cannot fail halfway.
 
 ### Storage
 
@@ -241,7 +253,13 @@ that event carries value in plaintext.
 
 ## Foundry tests
 
-Kill switch and idempotency are the two that must be airtight.
+24 tests, all passing. Kill switch and idempotency are the two that must be
+airtight, so both are covered from several angles — including that the hot
+emitter key **cannot** reach the kill switch.
+
+```bash
+forge test --root blockchain/packages/contracts -vv
+```
 
 ```
 test_RevokeAgent_SetsFlagAndEmits
@@ -258,7 +276,20 @@ test_SetEmitter_RotatesAndOldKeyRejected
 test_RegisterResource_EmitsReadablePreimage
 test_UpdateRiskScore_EmitsTierTransition
 testFuzz_NotionalUsdE6_NoOverflowAtUint64Bound
+testFuzz_OnlyOwnerCanRevoke
+test_RevokeAgent_RevertsForEmitter
+test_RecordDecisions_RevertsOnInvalidDecisionEnum
+test_RecordDecisions_RevertsOnInvalidTier
+test_RecordDecisions_RevertsOnZeroId
+test_RecordDecisions_RevertsOnEmptyBatch
+test_RegisterResource_RevertsOnEmptyName
+test_UpdateRiskScore_RevertsAboveRange
+test_SetEmitter_RevertsForNonOwner
 ```
+
+Malformed records **revert** while duplicates are **skipped**. That split is
+deliberate: a duplicate is an expected retry, whereas a bad enum or a zero id is
+an emitter bug, and the contract fails closed on it.
 
 ## Deployment
 
@@ -285,8 +316,8 @@ Then set `REGISTRY_ADDRESS` in `.env` and hand the address plus the ABI from
 blockchain/
   packages/
     contracts/          Foundry project — solc 0.8.28
-      src/              CapabilityRegistry.sol           (empty — to write)
-      test/             Foundry tests                    (empty — to write)
+      src/              CapabilityRegistry.sol
+      test/             CapabilityRegistry.t.sol         24 tests
       lib/forge-std/    submodule, v1.16.2
       foundry.toml
       foundry.lock
