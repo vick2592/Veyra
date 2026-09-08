@@ -1,33 +1,40 @@
+import type { Request, Response as ExpressResponse } from 'express';
+import { signRequest } from '@worldcoin/idkit-core/signing';
 import { z } from 'zod';
 
-const worldIdProofSchema = z.object({
-  proof: z.string().min(1),
-  merkle_root: z.string().min(1),
-  nullifier_hash: z.string().min(1),
-  verification_level: z.literal('orb'),
+const idKitResponseSchema = z.object({
+  protocol_version: z.enum(['3.0', '4.0']),
+  nonce: z.string().min(1),
+  action: z.string().min(1).optional(),
+  responses: z.array(z.object({
+    nullifier: z.string().min(1).optional(),
+    session_nullifier: z.array(z.string().min(1)).optional(),
+  }).passthrough()).min(1),
+}).passthrough();
+
+const signRequestSchema = z.object({
+  action: z.string().min(1),
 });
 
-const worldIdVerificationResponseSchema = z.object({
+const verifyResponseSchema = z.object({
   success: z.literal(true),
-  nullifier_hash: z.string().min(1).optional(),
-  verification_level: z.literal('orb').optional(),
-});
-
-export type WorldIdProof = z.infer<typeof worldIdProofSchema>;
+}).passthrough();
 
 export type WorldIdConfig = {
   appId: string;
+  rpId: string;
+  signingKey: string;
   action: string;
   apiBaseUrl?: string;
 };
 
 export type WorldIdVerifier = (
-  proof: unknown,
+  rpId: string,
+  idKitResponse: unknown,
 ) => Promise<WorldIdVerificationResult>;
 
 export type WorldIdVerificationResult = {
-  nullifierHash: string;
-  verificationLevel: 'orb';
+  nullifier: string;
 };
 
 export class WorldIdVerificationError extends Error {
@@ -40,74 +47,128 @@ export class WorldIdVerificationError extends Error {
   }
 }
 
-type FetchLike = typeof fetch;
+ type FetchLike = typeof fetch;
+
+export function createWorldIdSignHandler(config: WorldIdConfig) {
+  return (request: Request, response: ExpressResponse): void => {
+    const parsed = signRequestSchema.safeParse(request.body);
+    if (!parsed.success || parsed.data.action !== config.action) {
+      response.status(400).json({ error: 'The requested action is not allowed' });
+      return;
+    }
+
+    try {
+      const signature = signRequest({
+        signingKeyHex: config.signingKey,
+        action: config.action,
+      });
+
+      response.json({
+        rp_id: config.rpId,
+        nonce: signature.nonce,
+        created_at: signature.createdAt,
+        expires_at: signature.expiresAt,
+        signature: signature.sig,
+      });
+    } catch {
+      response.status(500).json({ error: 'World ID request signing failed' });
+    }
+  };
+}
 
 export function createWorldIdVerifier(
   config: WorldIdConfig,
   fetchImpl: FetchLike = fetch,
 ): WorldIdVerifier {
-  const apiBaseUrl = config.apiBaseUrl ?? 'https://developer.worldcoin.org';
+  const apiBaseUrl = config.apiBaseUrl ?? 'https://developer.world.org';
 
-  return async (input): Promise<WorldIdVerificationResult> => {
-    const proof = worldIdProofSchema.safeParse(input);
-    if (!proof.success) {
-      throw new WorldIdVerificationError('A valid orb World ID proof is required', 400);
+  return async (rpId, input): Promise<WorldIdVerificationResult> => {
+    if (rpId !== config.rpId) {
+      throw new WorldIdVerificationError('World ID RP ID mismatch', 400);
     }
 
-    const response = await fetchImpl(
-      `${apiBaseUrl}/api/v2/verify/${encodeURIComponent(config.appId)}`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          action: config.action,
-          ...proof.data,
-        }),
-      },
-    );
+    const idKitResponse = idKitResponseSchema.safeParse(input);
+    if (!idKitResponse.success) {
+      throw new WorldIdVerificationError('A complete IDKit response is required', 400);
+    }
 
-    if (!response.ok) {
+    if (
+      idKitResponse.data.action !== undefined &&
+      idKitResponse.data.action !== config.action
+    ) {
+      throw new WorldIdVerificationError('World ID action mismatch', 400);
+    }
+
+    const nullifier = extractNullifier(idKitResponse.data.responses);
+    if (nullifier === undefined) {
+      throw new WorldIdVerificationError('World ID response has no nullifier', 400);
+    }
+
+    let portalResponse: globalThis.Response;
+    try {
+      portalResponse = await fetchImpl(
+        `${apiBaseUrl}/api/v4/verify/${encodeURIComponent(config.rpId)}`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(input),
+        },
+      );
+    } catch {
+      throw new WorldIdVerificationError('World ID verification is unavailable', 502);
+    }
+
+    if (!portalResponse.ok) {
       throw new WorldIdVerificationError('World ID proof verification failed', 400);
     }
 
-    const verification = worldIdVerificationResponseSchema.safeParse(
-      await response.json(),
-    );
+    const verification = verifyResponseSchema.safeParse(await portalResponse.json());
     if (!verification.success) {
       throw new WorldIdVerificationError('World ID returned an invalid verification response', 502);
     }
 
-    if (
-      verification.data.nullifier_hash !== undefined &&
-      verification.data.nullifier_hash !== proof.data.nullifier_hash
-    ) {
-      throw new WorldIdVerificationError('World ID nullifier mismatch', 400);
-    }
-
-    return {
-      nullifierHash: proof.data.nullifier_hash,
-      verificationLevel: 'orb',
-    };
+    return { nullifier };
   };
 }
 
+function extractNullifier(
+  responses: Array<{
+    nullifier?: string | undefined;
+    session_nullifier?: string[] | undefined;
+  }>,
+): string | undefined {
+  for (const response of responses) {
+    if (response.nullifier !== undefined) {
+      return response.nullifier;
+    }
+    if (response.session_nullifier?.[0] !== undefined) {
+      return response.session_nullifier[0];
+    }
+  }
+  return undefined;
+}
+
 export function getWorldIdConfig(config: {
-  worldAppId?: string;
+  worldIdAppId?: string;
+  worldIdRpId?: string;
+  worldIdSigningKey?: string;
   worldAction?: string;
 }): WorldIdConfig {
-  const parsed = z
-    .object({
-      worldAppId: z.string().regex(/^app_/),
-      worldAction: z.string().min(1),
-    })
-    .safeParse(config);
+  const parsed = z.object({
+    worldIdAppId: z.string().regex(/^app_/),
+    worldIdRpId: z.string().regex(/^rp_/),
+    worldIdSigningKey: z.string().regex(/^(0x)?[0-9a-fA-F]{64}$/),
+    worldAction: z.string().min(1),
+  }).safeParse(config);
 
   if (!parsed.success) {
-    throw new Error('WORLD_APP_ID and WORLD_ACTION must be configured');
+    throw new Error('WORLD_ID_APP_ID, WORLD_ID_RP_ID, WORLD_ID_SIGNING_KEY, and WORLD_ACTION must be configured');
   }
 
   return {
-    appId: parsed.data.worldAppId,
+    appId: parsed.data.worldIdAppId,
+    rpId: parsed.data.worldIdRpId,
+    signingKey: parsed.data.worldIdSigningKey,
     action: parsed.data.worldAction,
   };
 }

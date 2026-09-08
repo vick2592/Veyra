@@ -2,22 +2,23 @@ import { access, readFile, writeFile } from 'node:fs/promises';
 import { describe, expect, it, vi } from 'vitest';
 import { createExecuteAgentHandler } from './execute-agent.js';
 import { createKeyring, KeyringError } from './keyring.js';
+import { createWorldIdSignHandler, createWorldIdVerifier } from './world-id.js';
 
-type WorldIdProofFixture = {
-  proof: string;
-  merkle_root: string;
-  nullifier_hash: string;
-  verification_level: string;
+const idKitResponse = {
+  protocol_version: '4.0',
+  nonce: 'nonce',
+  action: 'execute-agent',
+  environment: 'production',
+  responses: [{
+    identifier: 'proof_of_human',
+    proof: ['proof'],
+    nullifier: 'nullifier',
+    issuer_schema_id: 1,
+    expires_at_min: 1,
+  }],
 };
 
 describe('execute-agent handler', () => {
-  const proof: WorldIdProofFixture = {
-    proof: 'proof',
-    merkle_root: 'root',
-    nullifier_hash: 'nullifier',
-    verification_level: 'orb',
-  };
-
   it('verifies World ID before decrypting or calling the provider', async () => {
     const verifier = vi.fn().mockRejectedValue(new Error('invalid proof'));
     const keyring = { decryptSecret: vi.fn() };
@@ -25,7 +26,7 @@ describe('execute-agent handler', () => {
     const response = createResponse();
 
     await createExecuteAgentHandler(verifier, keyring, { agentApiUrl: 'https://provider.test' }, fetchImpl)(
-      { body: proofRequest(proof) } as never,
+      { body: { rp_id: 'rp_test', idkitResponse: idKitResponse } } as never,
       response as never,
     );
 
@@ -41,7 +42,7 @@ describe('execute-agent handler', () => {
     const response = createResponse();
 
     await createExecuteAgentHandler(verifier, keyring, { agentApiUrl: 'https://provider.test' }, fetchImpl)(
-      { body: proofRequest(proof) } as never,
+      { body: { rp_id: 'rp_test', idkitResponse: idKitResponse } } as never,
       response as never,
     );
 
@@ -50,6 +51,53 @@ describe('execute-agent handler', () => {
       headers: { authorization: 'Bearer secret-key' },
     });
     expect(response.status).toHaveBeenCalledWith(200);
+  });
+});
+
+describe('World ID 4 RP integration', () => {
+  const config = {
+    appId: 'app_test',
+    rpId: 'rp_test',
+    signingKey: '1'.repeat(64),
+    action: 'execute-agent',
+  };
+
+  it('signs only the configured action with a server-side key', () => {
+    const response = createResponse();
+    const handler = createWorldIdSignHandler(config);
+
+    handler({ body: { action: 'execute-agent' } } as never, response as never);
+
+    expect(response.status).not.toHaveBeenCalled();
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      rp_id: 'rp_test',
+      signature: expect.stringMatching(/^0x/),
+      nonce: expect.any(String),
+      created_at: expect.any(Number),
+      expires_at: expect.any(Number),
+    }));
+  });
+
+  it('rejects signing arbitrary actions', () => {
+    const response = createResponse();
+    const handler = createWorldIdSignHandler(config);
+
+    handler({ body: { action: 'other-action' } } as never, response as never);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({ error: 'The requested action is not allowed' });
+  });
+
+  it('forwards the complete IDKit response to the V4 endpoint', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response('{"success":true}', { status: 200 }));
+    const verifier = createWorldIdVerifier(config, fetchImpl);
+
+    await expect(verifier('rp_test', idKitResponse)).resolves.toEqual({ nullifier: 'nullifier' });
+    expect(fetchImpl).toHaveBeenCalledWith('https://developer.world.org/api/v4/verify/rp_test', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(idKitResponse),
+    });
   });
 });
 
@@ -84,10 +132,6 @@ describe('keyring', () => {
     expect((await readFile(outputPath).catch(() => Buffer.from(''))).length).toBe(0);
   });
 });
-
-function proofRequest(worldIdProof: WorldIdProofFixture) {
-  return { action: 'execute-agent', ...worldIdProof };
-}
 
 function createResponse() {
   return {

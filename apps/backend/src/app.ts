@@ -3,7 +3,7 @@ import express, { type Express } from 'express';
 import type { AppConfig } from './config.js';
 import { createExecuteAgentHandler } from './execute-agent.js';
 import { createKeyring } from './keyring.js';
-import { createWorldIdVerifier, getWorldIdConfig } from './world-id.js';
+import { createWorldIdSignHandler, createWorldIdVerifier, getWorldIdConfig } from './world-id.js';
 
 export function createApp(config: AppConfig): Express {
   const app = express();
@@ -11,8 +11,25 @@ export function createApp(config: AppConfig): Express {
   app.use(cors({ origin: config.corsOrigin }));
   app.use(express.json());
 
-  if (config.worldAppId !== undefined && config.worldAction !== undefined && config.walletPass !== undefined) {
-    const verifier = createWorldIdVerifier(getWorldIdConfig(config));
+  if (
+    config.worldIdAppId !== undefined &&
+    config.worldIdRpId !== undefined &&
+    config.worldIdSigningKey !== undefined &&
+    config.worldAction !== undefined
+  ) {
+    const worldIdConfig = getWorldIdConfig(config);
+    app.post('/api/world-id/sign', createWorldIdSignHandler(worldIdConfig));
+  }
+
+  if (
+    config.worldIdAppId !== undefined &&
+    config.worldIdRpId !== undefined &&
+    config.worldIdSigningKey !== undefined &&
+    config.worldAction !== undefined &&
+    config.walletPass !== undefined
+  ) {
+    const worldIdConfig = getWorldIdConfig(config);
+    const verifier = createWorldIdVerifier(worldIdConfig);
     const keyring = createKeyring({
       walletPass: config.walletPass,
       secretsEncPath: config.secretsEncPath,

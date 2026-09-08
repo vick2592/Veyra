@@ -14,7 +14,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@worldcoin/idkit-core": "latest",
+    "@worldcoin/idkit-core": "^4.2.4",
     "cors": "latest",
     "dotenv": "latest",
     "express": "latest",

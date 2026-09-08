@@ -4,11 +4,8 @@ import type { SecretKeyring } from './keyring.js';
 import { WorldIdVerificationError, type WorldIdVerifier } from './world-id.js';
 
 const executeAgentRequestSchema = z.object({
-  action: z.literal('execute-agent'),
-  proof: z.string().min(1),
-  merkle_root: z.string().min(1),
-  nullifier_hash: z.string().min(1),
-  verification_level: z.string().min(1),
+  rp_id: z.string().regex(/^rp_/),
+  idkitResponse: z.unknown(),
 });
 
 export type AgentExecutorConfig = {
@@ -31,12 +28,7 @@ export function createExecuteAgentHandler(
     }
 
     try {
-      await verifier({
-        proof: parsed.data.proof,
-        merkle_root: parsed.data.merkle_root,
-        nullifier_hash: parsed.data.nullifier_hash,
-        verification_level: parsed.data.verification_level,
-      });
+      await verifier(parsed.data.rp_id, parsed.data.idkitResponse);
     } catch (error) {
       if (error instanceof WorldIdVerificationError) {
         response.status(error.statusCode).json({ error: error.message });
@@ -48,7 +40,7 @@ export function createExecuteAgentHandler(
 
     let apiKey: string | undefined;
     try {
-      apiKey = await keyring.decryptSecret(parsed.data.action);
+      apiKey = await keyring.decryptSecret('execute-agent');
       const upstreamResponse = await fetchImpl(config.agentApiUrl, {
         headers: { authorization: `Bearer ${apiKey}` },
       });
@@ -59,7 +51,7 @@ export function createExecuteAgentHandler(
       }
 
       response.status(200).json({
-        action: parsed.data.action,
+        action: 'execute-agent',
         result: await upstreamResponse.json(),
       });
     } catch {
