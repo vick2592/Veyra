@@ -261,7 +261,9 @@ contract VeyraRegistryTest is Test {
         _store(user);
         _authorize(user, SECRET_ID);
 
-        assertEq(worldId.lastSignalHash(), uint256(keccak256(abi.encodePacked(user, agent, SECRET_ID))));
+        // >> 8 mirrors World ID's ByteHasher, which reduces the digest into the
+        // BN254 scalar field. The frontend signal must hash to the same value.
+        assertEq(worldId.lastSignalHash(), uint256(keccak256(abi.encodePacked(user, agent, SECRET_ID))) >> 8);
     }
 
     /// @dev Closes the gap where the stored secret list was never consulted.

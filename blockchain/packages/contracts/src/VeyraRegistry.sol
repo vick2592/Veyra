@@ -331,7 +331,9 @@ contract VeyraRegistry {
         // call through verifyProof finds it already spent.
         nullifierHashUsed[nullifierHash] = true;
 
-        uint256 signalHash = uint256(keccak256(abi.encodePacked(msg.sender, agentAddress, secretId)));
+        // World ID's ByteHasher is keccak256 >> 8, so the digest fits the BN254
+        // scalar field. Omitting the shift yields a hash the router will never match.
+        uint256 signalHash = uint256(keccak256(abi.encodePacked(msg.sender, agentAddress, secretId))) >> 8;
         worldId.verifyProof(root, groupId, signalHash, nullifierHash, externalNullifierHash, proof);
 
         emit AgentAuthorized(

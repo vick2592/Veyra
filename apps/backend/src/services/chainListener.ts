@@ -11,7 +11,7 @@ import type { SecretKeyring } from '../keyring.js';
 import type { PendingRequestStore } from '../queue/store.js';
 
 const agentAuthorizedAbi = parseAbi([
-  'event AgentAuthorized(address indexed user, address agent, string secretIdentifier, bytes32 requestId)',
+  'event AgentAuthorized(address indexed user, address indexed agent, bytes32 indexed secretId, uint256 nullifierHash, bytes32 requestId, uint64 authorizedAt)',
 ]);
 
 export type ChainListenerConfig = {
@@ -39,7 +39,9 @@ export type ChainListener = {
 
 type AuthorizedLog = {
   args: {
-    secretIdentifier?: string;
+    // secretIdentifier is no longer on the event — it is a bytes32 secretId hash now.
+    // The plaintext identifier comes from the pending request store instead.
+    secretId?: string;
     requestId?: string;
   };
   transactionHash: `0x${string}`;
