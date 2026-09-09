@@ -18,6 +18,7 @@
     "cors": "latest",
     "dotenv": "latest",
     "express": "latest",
+    "viem": "^2.56.3",
     "zod": "latest"
   },
   "devDependencies": {

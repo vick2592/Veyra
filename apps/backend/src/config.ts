@@ -14,6 +14,12 @@ const configSchema = z.object({
   WALLET_PASS: z.string().min(1).optional(),
   SECRETS_ENC_PATH: z.string().min(1).default(path.resolve(process.cwd(), '../../secrets.enc')),
   AGENT_API_URL: z.string().url().default('https://api.openai.com/v1/models'),
+  RPC_URL: z.string().url().optional(),
+  CHAIN_ID: z.coerce.number().int().positive().default(84532),
+  REGISTRY_ADDRESS: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(),
+  LISTENER_STARTING_BLOCK: z.coerce.bigint().nonnegative().optional(),
+  LISTENER_CONFIRMATIONS: z.coerce.number().int().nonnegative().default(2),
+  LISTENER_POLLING_INTERVAL_MS: z.coerce.number().int().positive().default(4_000),
 });
 
 export type AppConfig = {
@@ -28,6 +34,12 @@ export type AppConfig = {
   walletPass?: string;
   secretsEncPath: string;
   agentApiUrl: string;
+  rpcUrl?: string;
+  chainId: number;
+  registryAddress?: `0x${string}`;
+  listenerStartingBlock?: bigint;
+  listenerConfirmations: number;
+  listenerPollingIntervalMs: number;
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -45,5 +57,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     ...(parsed.WALLET_PASS === undefined ? {} : { walletPass: parsed.WALLET_PASS }),
     secretsEncPath: parsed.SECRETS_ENC_PATH,
     agentApiUrl: parsed.AGENT_API_URL,
+    ...(parsed.RPC_URL === undefined ? {} : { rpcUrl: parsed.RPC_URL }),
+    chainId: parsed.CHAIN_ID,
+    ...(parsed.REGISTRY_ADDRESS === undefined
+      ? {}
+      : { registryAddress: parsed.REGISTRY_ADDRESS as `0x${string}` }),
+    ...(parsed.LISTENER_STARTING_BLOCK === undefined
+      ? {}
+      : { listenerStartingBlock: parsed.LISTENER_STARTING_BLOCK }),
+    listenerConfirmations: parsed.LISTENER_CONFIRMATIONS,
+    listenerPollingIntervalMs: parsed.LISTENER_POLLING_INTERVAL_MS,
   };
 }
