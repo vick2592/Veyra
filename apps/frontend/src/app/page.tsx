@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useAccount, useConnect, useWriteContract } from 'wagmi';
 import {
   IDKitRequestWidget,
   selfieCheckLegacy,
@@ -13,14 +14,85 @@ type RequestState = 'idle' | 'submitting' | 'success' | 'error';
 const worldAppId = process.env.NEXT_PUBLIC_WORLD_ID_APP_ID ?? '';
 const worldRpId = process.env.NEXT_PUBLIC_WORLD_ID_RP_ID ?? '';
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
+const registryAddress = process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}` | undefined;
+
+const registryAbi = [{
+  type: 'function',
+  name: 'authorizeAgent',
+  stateMutability: 'nonpayable',
+  inputs: [
+    {name: 'agentAddress', type: 'address'},
+    {name: 'secretIdentifier', type: 'string'},
+    {name: 'root', type: 'uint256'},
+    {name: 'nullifierHash', type: 'uint256'},
+    {name: 'proof', type: 'uint256[8]'},
+  ],
+  outputs: [],
+}] as const;
+
+type OnChainProof = {
+  root: string;
+  nullifierHash: string;
+  proof: string[];
+};
+
+function getOnChainProof(result: IDKitResult): OnChainProof {
+  const legacyResult = result as IDKitResult & {
+    root?: string;
+    nullifier_hash?: string;
+    proof?: string[];
+  };
+  if (
+    legacyResult.root !== undefined &&
+    legacyResult.nullifier_hash !== undefined &&
+    legacyResult.proof !== undefined &&
+    legacyResult.proof.length === 8
+  ) {
+    return {
+      root: legacyResult.root,
+      nullifierHash: legacyResult.nullifier_hash,
+      proof: legacyResult.proof,
+    };
+  }
+
+  const response = result.responses[0] as {
+    merkle_root?: string;
+    nullifier?: string;
+    proof?: string[];
+    session_nullifier?: string[];
+  } | undefined;
+  const proof = response?.proof;
+  const root = response?.merkle_root ?? proof?.[4];
+  const nullifierHash = response?.nullifier ?? response?.session_nullifier?.[0];
+  if (root === undefined || nullifierHash === undefined || proof === undefined || proof.length !== 8) {
+    throw new Error('World ID returned an incomplete on-chain proof.');
+  }
+
+  return {root, nullifierHash, proof};
+}
 
 export default function Home() {
   const [requestState, setRequestState] = useState<RequestState>('idle');
   const [message, setMessage] = useState('');
+  const [secretIdentifier, setSecretIdentifier] = useState('');
   const [rpContext, setRpContext] = useState<RpContext | null>(null);
   const [widgetOpen, setWidgetOpen] = useState(false);
+  const {address, isConnected} = useAccount();
+  const {connect, connectors} = useConnect();
+  const {writeContractAsync} = useWriteContract();
+
+  const injectedConnector = connectors[0];
 
   async function handleAuthorize() {
+    if (!isConnected || address === undefined) {
+      setMessage('Connect a wallet before authorizing an agent.');
+      return;
+    }
+    if (secretIdentifier.trim().length === 0) {
+      setMessage('Enter the Ledger Key Ring identifier to unlock.');
+      return;
+    }
+
     setRequestState('submitting');
     setMessage('Preparing a signed World ID request...');
 
@@ -28,7 +100,7 @@ export default function Home() {
       const response = await fetch(`${backendUrl}/api/world-id/sign`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'execute-agent' }),
+        body: JSON.stringify({ action: secretIdentifier.trim() }),
       });
 
       const body = await response.json().catch(() => null) as {
@@ -69,31 +141,32 @@ export default function Home() {
   }
 
   async function handleVerify(result: IDKitResult) {
-    if (rpContext === null) {
-      throw new Error('The World ID request context is missing.');
+    if (rpContext === null || address === undefined || registryAddress === undefined) {
+      throw new Error('Wallet, registry, or World ID request context is missing.');
     }
 
     setRequestState('submitting');
-    setMessage('Proof received. Asking the broker to authorize execution...');
+    setMessage('Proof received. Submitting on-chain authorization...');
 
-    const response = await fetch(`${backendUrl}/api/execute-agent`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        rp_id: rpContext.rp_id,
-        idkitResponse: result,
-      }),
+    const onChainProof = getOnChainProof(result);
+    await writeContractAsync({
+      address: registryAddress,
+      abi: registryAbi,
+      functionName: 'authorizeAgent',
+      args: [
+        address,
+        secretIdentifier.trim(),
+        BigInt(onChainProof.root),
+        BigInt(onChainProof.nullifierHash),
+        onChainProof.proof.map((value) => BigInt(value)) as unknown as readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint],
+      ],
     });
-
-    const body = await response.json().catch(() => null) as { error?: string } | null;
-    if (!response.ok) {
-      throw new Error(body?.error ?? 'The broker rejected the execution request.');
-    }
+    setMessage('Authorization submitted. Waiting for the chain listener.');
   }
 
   function handleSuccess() {
     setRequestState('success');
-    setMessage('Execution authorized. The broker completed the agent request.');
+    setMessage('Authorization confirmed. The chain listener will execute the agent capability.');
     setRpContext(null);
   }
 
@@ -105,6 +178,7 @@ export default function Home() {
 
   const isBusy = requestState === 'submitting';
   const hasWorldIdConfig = worldAppId.startsWith('app_') && worldRpId.startsWith('rp_');
+  const canAuthorize = hasWorldIdConfig && registryAddress?.startsWith('0x') === true && isConnected;
 
   return (
     <main className="min-h-screen px-5 py-6 sm:px-10 sm:py-10">
@@ -139,6 +213,15 @@ export default function Home() {
           <div aria-live="polite">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-(--muted)">Requested action</p>
             <p className="mt-2 text-2xl">Execute agent capability</p>
+            <label className="mt-5 block max-w-xl text-sm text-(--muted)">
+              Ledger Key Ring identifier
+              <input
+                value={secretIdentifier}
+                onChange={(event) => setSecretIdentifier(event.target.value)}
+                placeholder="ledger-key-42"
+                className="mt-2 w-full rounded-2xl border border-(--line) bg-white/70 px-4 py-3 text-(--ink) outline-none focus:border-(--ink)"
+              />
+            </label>
             {message && (
               <p className={`mt-3 max-w-xl text-sm ${requestState === 'error' ? 'text-[#a83f31]' : requestState === 'success' ? 'text-[#28734a]' : 'text-(--muted)'}`}>
                 {message}
@@ -146,25 +229,41 @@ export default function Home() {
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={handleAuthorize}
-            disabled={!hasWorldIdConfig || isBusy}
-            className="min-w-56 rounded-full bg-(--ink) px-6 py-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#2a3a2f] disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            {isBusy ? 'Preparing...' : 'Authorize execution'}
-          </button>
+          <div className="flex flex-col items-stretch gap-3 sm:items-end">
+            {!isConnected ? (
+              <button
+                type="button"
+                onClick={() => injectedConnector !== undefined && connect({connector: injectedConnector})}
+                disabled={injectedConnector === undefined}
+                className="min-w-56 rounded-full border border-(--ink) px-6 py-4 text-sm font-semibold text-(--ink) transition hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                Connect wallet
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleAuthorize}
+                disabled={!canAuthorize || isBusy}
+                className="min-w-56 rounded-full bg-(--ink) px-6 py-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#2a3a2f] disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                {isBusy ? 'Preparing...' : 'Authorize execution'}
+              </button>
+            )}
+            {isConnected && address !== undefined && (
+              <span className="text-xs text-(--muted)">{address.slice(0, 6)}...{address.slice(-4)}</span>
+            )}
+          </div>
 
           {rpContext !== null && (
             <IDKitRequestWidget
               open={widgetOpen}
               onOpenChange={setWidgetOpen}
               app_id={worldAppId as `app_${string}`}
-              action="execute-agent"
+              action={secretIdentifier.trim()}
               rp_context={rpContext}
               environment="staging"
               allow_legacy_proofs={true}
-              preset={selfieCheckLegacy()}
+              preset={selfieCheckLegacy({signal: address})}
               handleVerify={handleVerify}
               onSuccess={handleSuccess}
               onError={handleError}

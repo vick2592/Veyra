@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createConfig, http, WagmiProvider } from 'wagmi';
+import { injected } from 'wagmi/connectors';
 import { type Chain } from 'viem';
 
 const anvilChain: Chain = {
@@ -15,6 +16,7 @@ const anvilChain: Chain = {
 
 const wagmiConfig = createConfig({
   chains: [anvilChain],
+  connectors: [injected()],
   transports: {
     [anvilChain.id]: http(process.env.NEXT_PUBLIC_RPC_URL ?? 'http://127.0.0.1:8545'),
   },
