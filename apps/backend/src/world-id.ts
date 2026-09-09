@@ -2,6 +2,7 @@ import type { Request, Response as ExpressResponse } from 'express';
 import { signRequest } from '@worldcoin/idkit-core/signing';
 import { z } from 'zod';
 
+
 const idKitResponseSchema = z.object({
   protocol_version: z.enum(['3.0', '4.0']),
   nonce: z.string().min(1),
@@ -118,11 +119,31 @@ export function createWorldIdVerifier(
       throw new WorldIdVerificationError('World ID verification is unavailable', 502);
     }
 
+    let rawBody: string;
+    try {
+      rawBody = await portalResponse.text();
+    } catch {
+      throw new WorldIdVerificationError('World ID verification response could not be read', 502);
+    }
+
+    console.error('World ID verification response', {
+      status: portalResponse.status,
+      statusText: portalResponse.statusText,
+      body: rawBody,
+    });
+
     if (!portalResponse.ok) {
       throw new WorldIdVerificationError('World ID proof verification failed', 400);
     }
 
-    const verification = verifyResponseSchema.safeParse(await portalResponse.json());
+    let parsedBody: unknown;
+    try {
+      parsedBody = JSON.parse(rawBody);
+    } catch {
+      throw new WorldIdVerificationError('World ID returned an invalid verification response', 502);
+    }
+
+    const verification = verifyResponseSchema.safeParse(parsedBody);
     if (!verification.success) {
       throw new WorldIdVerificationError('World ID returned an invalid verification response', 502);
     }
