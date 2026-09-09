@@ -14,6 +14,33 @@ export type AgentExecutorConfig = {
 
 type FetchLike = typeof fetch;
 
+export async function executeAgentWithSecret(
+  secretIdentifier: string,
+  keyring: SecretKeyring,
+  config: AgentExecutorConfig,
+  fetchImpl: FetchLike = fetch,
+): Promise<unknown> {
+  if (secretIdentifier.length === 0) {
+    throw new Error('A secret identifier is required');
+  }
+
+  let apiKey: string | undefined;
+  try {
+    apiKey = await keyring.decryptSecret('execute-agent');
+    const upstreamResponse = await fetchImpl(config.agentApiUrl, {
+      headers: { authorization: `Bearer ${apiKey}` },
+    });
+
+    if (!upstreamResponse.ok) {
+      throw new Error('Agent provider request failed');
+    }
+
+    return await upstreamResponse.json();
+  } finally {
+    apiKey = undefined;
+  }
+}
+
 export function createExecuteAgentHandler(
   verifier: WorldIdVerifier,
   keyring: SecretKeyring,
@@ -38,26 +65,13 @@ export function createExecuteAgentHandler(
       return;
     }
 
-    let apiKey: string | undefined;
     try {
-      apiKey = await keyring.decryptSecret('execute-agent');
-      const upstreamResponse = await fetchImpl(config.agentApiUrl, {
-        headers: { authorization: `Bearer ${apiKey}` },
-      });
-
-      if (!upstreamResponse.ok) {
-        response.status(502).json({ error: 'Agent provider request failed' });
-        return;
-      }
-
       response.status(200).json({
         action: 'execute-agent',
-        result: await upstreamResponse.json(),
+        result: await executeAgentWithSecret('execute-agent', keyring, config, fetchImpl),
       });
     } catch {
       response.status(502).json({ error: 'Agent execution failed' });
-    } finally {
-      apiKey = undefined;
     }
   };
 }
