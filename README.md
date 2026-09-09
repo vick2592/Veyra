@@ -27,7 +27,7 @@ blockchain/  Web3 packages, contracts, and tooling
 6. The chain listener waits for confirmations, claims the matching queued request, decrypts the allowlisted Ledger Key Ring secret, and calls the configured provider.
 7. The agent polls `GET /api/bazantic/requests/:requestId` for `completed` or `failed` and receives only the final result or a sanitized error.
 
-The current `services/bazantic.ts` module is deliberately an adapter seam. Its settlement function is injected by the app and currently accepts the configured payment-reference header; the live Bazantic SDK/facilitator implementation must be supplied once the bounty API credentials and exact settlement contract are confirmed.
+Bazantic's hosted gateway is the production payment boundary: submit `docs/veyra-bazantic-openapi.yaml` (or the deployed API URL) through the Bazantic provider flow and let Bazantic generate the agent-facing gateway, MCP surface, and x402/MPP payment handling. The local `services/bazantic.ts` adapter remains useful for direct/local testing, but it is not a replacement for Bazantic's hosted settlement service.
 
 ### Decentralized authorization flow
 
@@ -113,7 +113,7 @@ forge script script/DeployVeyraRegistry.s.sol:DeployVeyraRegistry \
 
 The placeholder World ID address is deployment-only and cannot verify real proofs. A real World ID verifier address and matching external nullifier configuration are required outside local Anvil. The deployment script is `blockchain/packages/contracts/script/DeployVeyraRegistry.s.sol`.
 
-The backend signs the requested secret identifier and verifies that the returned World ID action matches the same identifier. The legacy HTTP route requires `secretIdentifier` in its request body; the chain listener bypasses this route and trusts only `AgentAuthorized` events from the configured registry.
+The backend signs the requested secret identifier and verifies that the returned World ID action matches the same identifier. The Bazantic provider submission spec is `docs/veyra-bazantic-openapi.yaml`. The legacy HTTP route requires `secretIdentifier` in its request body; the chain listener bypasses this route and trusts only `AgentAuthorized` events from the configured registry.
 
 ## Web3 Workspace
 
