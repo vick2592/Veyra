@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAccount, useConnect, useWriteContract } from 'wagmi';
 import {
   IDKitRequestWidget,
@@ -23,6 +23,7 @@ const registryAbi = [{
   inputs: [
     {name: 'agentAddress', type: 'address'},
     {name: 'secretIdentifier', type: 'string'},
+    {name: 'requestId', type: 'bytes32'},
     {name: 'root', type: 'uint256'},
     {name: 'nullifierHash', type: 'uint256'},
     {name: 'proof', type: 'uint256[8]'},
@@ -34,6 +35,18 @@ type OnChainProof = {
   root: string;
   nullifierHash: string;
   proof: string[];
+};
+
+type PendingRequest = {
+  requestId: string;
+  status: 'pending_human_auth' | 'executing' | 'completed' | 'failed';
+  agentAddress: string;
+  secretIdentifier: string;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+  result?: unknown;
+  error?: {code: string; message: string};
 };
 
 function getOnChainProof(result: IDKitResult): OnChainProof {
@@ -75,6 +88,8 @@ export default function Home() {
   const [requestState, setRequestState] = useState<RequestState>('idle');
   const [message, setMessage] = useState('');
   const [secretIdentifier, setSecretIdentifier] = useState('');
+  const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
+  const [selectedRequestId, setSelectedRequestId] = useState('');
   const [rpContext, setRpContext] = useState<RpContext | null>(null);
   const [widgetOpen, setWidgetOpen] = useState(false);
   const {address, isConnected} = useAccount();
@@ -83,15 +98,75 @@ export default function Home() {
 
   const injectedConnector = connectors[0];
 
+  useEffect(() => {
+    let active = true;
+
+    async function loadPendingRequests() {
+      const response = await fetch(`${backendUrl}/api/bazantic/pending`);
+      if (!response.ok || !active) {
+        return;
+      }
+      const body = await response.json() as {requests?: PendingRequest[]};
+      setPendingRequests(body.requests ?? []);
+    }
+
+    void loadPendingRequests().catch(() => undefined);
+    const interval = window.setInterval(() => {
+      void loadPendingRequests().catch(() => undefined);
+    }, 5_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (selectedRequestId.length === 0) {
+      return;
+    }
+
+    let active = true;
+    async function loadRequestStatus() {
+      const response = await fetch(`${backendUrl}/api/bazantic/requests/${selectedRequestId}`);
+      if (!response.ok || !active) {
+        return;
+      }
+      const request = await response.json() as PendingRequest;
+      setPendingRequests((current) => current.map((item) => item.requestId === request.requestId ? request : item));
+      if (request.status === 'completed') {
+        setRequestState('success');
+        setMessage('Capability completed. The agent can retrieve the result.');
+      } else if (request.status === 'failed') {
+        setRequestState('error');
+        setMessage(request.error?.message ?? 'The capability execution failed.');
+      } else if (request.status === 'executing') {
+        setMessage('Authorization confirmed. Executing the agent capability...');
+      }
+    }
+
+    void loadRequestStatus().catch(() => undefined);
+    const interval = window.setInterval(() => {
+      void loadRequestStatus().catch(() => undefined);
+    }, 3_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [selectedRequestId]);
+
+  const selectedRequest = pendingRequests.find((request) => request.requestId === selectedRequestId);
+
   async function handleAuthorize() {
     if (!isConnected || address === undefined) {
       setMessage('Connect a wallet before authorizing an agent.');
       return;
     }
-    if (secretIdentifier.trim().length === 0) {
-      setMessage('Enter the Ledger Key Ring identifier to unlock.');
+    if (selectedRequest === undefined) {
+      setMessage('Select a pending agent request before authorizing.');
       return;
     }
+
+    setSecretIdentifier(selectedRequest.secretIdentifier);
 
     setRequestState('submitting');
     setMessage('Preparing a signed World ID request...');
@@ -100,7 +175,7 @@ export default function Home() {
       const response = await fetch(`${backendUrl}/api/world-id/sign`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: secretIdentifier.trim() }),
+        body: JSON.stringify({ action: selectedRequest.secretIdentifier }),
       });
 
       const body = await response.json().catch(() => null) as {
@@ -141,7 +216,7 @@ export default function Home() {
   }
 
   async function handleVerify(result: IDKitResult) {
-    if (rpContext === null || address === undefined || registryAddress === undefined) {
+    if (rpContext === null || address === undefined || registryAddress === undefined || selectedRequest === undefined) {
       throw new Error('Wallet, registry, or World ID request context is missing.');
     }
 
@@ -155,7 +230,8 @@ export default function Home() {
       functionName: 'authorizeAgent',
       args: [
         address,
-        secretIdentifier.trim(),
+        selectedRequest.secretIdentifier,
+        selectedRequest.requestId as `0x${string}`,
         BigInt(onChainProof.root),
         BigInt(onChainProof.nullifierHash),
         onChainProof.proof.map((value) => BigInt(value)) as unknown as readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint],
@@ -178,7 +254,7 @@ export default function Home() {
 
   const isBusy = requestState === 'submitting';
   const hasWorldIdConfig = worldAppId.startsWith('app_') && worldRpId.startsWith('rp_');
-  const canAuthorize = hasWorldIdConfig && registryAddress?.startsWith('0x') === true && isConnected;
+  const canAuthorize = hasWorldIdConfig && registryAddress?.startsWith('0x') === true && isConnected && selectedRequest !== undefined;
 
   return (
     <main className="min-h-screen px-5 py-6 sm:px-10 sm:py-10">
@@ -209,6 +285,41 @@ export default function Home() {
           </div>
         </section>
 
+        <section className="border-t border-(--line) pt-6" aria-live="polite">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-(--muted)">Pending agent requests</p>
+              <p className="mt-2 text-sm text-(--muted)">Select the paid request you want to authorize with Face Auth.</p>
+            </div>
+            <span className="text-xs text-(--muted)">{pendingRequests.length} waiting</span>
+          </div>
+          <div className="mt-4 grid gap-3">
+            {pendingRequests.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-(--line) px-4 py-5 text-sm text-(--muted)">
+                No pending requests yet.
+              </p>
+            ) : pendingRequests.map((request) => (
+              <button
+                key={request.requestId}
+                type="button"
+                onClick={() => {
+                  setSelectedRequestId(request.requestId);
+                  setSecretIdentifier(request.secretIdentifier);
+                  setRequestState('idle');
+                  setMessage('Request selected. Complete Face Auth to authorize it.');
+                }}
+                className={`flex items-center justify-between gap-4 rounded-2xl border px-4 py-4 text-left transition ${request.requestId === selectedRequestId ? 'border-(--ink) bg-white' : 'border-(--line) bg-white/45 hover:bg-white'}`}
+              >
+                <span>
+                  <span className="block text-sm font-semibold">{request.secretIdentifier}</span>
+                  <span className="mt-1 block text-xs text-(--muted)">{request.requestId.slice(0, 14)}...</span>
+                </span>
+                <span className="text-xs uppercase tracking-[0.14em] text-(--muted)">{request.status.replaceAll('_', ' ')}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
         <section className="grid gap-5 border-t border-(--line) pt-6 sm:grid-cols-[1fr_auto] sm:items-center">
           <div aria-live="polite">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-(--muted)">Requested action</p>
@@ -217,8 +328,8 @@ export default function Home() {
               Ledger Key Ring identifier
               <input
                 value={secretIdentifier}
-                onChange={(event) => setSecretIdentifier(event.target.value)}
-                placeholder="ledger-key-42"
+                readOnly
+                placeholder="Select a pending request"
                 className="mt-2 w-full rounded-2xl border border-(--line) bg-white/70 px-4 py-3 text-(--ink) outline-none focus:border-(--ink)"
               />
             </label>
@@ -259,7 +370,7 @@ export default function Home() {
               open={widgetOpen}
               onOpenChange={setWidgetOpen}
               app_id={worldAppId as `app_${string}`}
-              action={secretIdentifier.trim()}
+              action={selectedRequest?.secretIdentifier ?? secretIdentifier.trim()}
               rp_context={rpContext}
               environment="staging"
               allow_legacy_proofs={true}

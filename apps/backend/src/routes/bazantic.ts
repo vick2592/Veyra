@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import type { PendingRequestStore } from '../queue/store.js';
 import type { BazanticAdapter } from '../services/bazantic.js';
 
@@ -27,6 +27,8 @@ function toStatusResponse(request: ReturnType<PendingRequestStore['get']>) {
   return {
     requestId: request.requestId,
     status: request.state,
+    agentAddress: request.agentAddress,
+    secretIdentifier: request.secretIdentifier,
     createdAt: request.createdAt,
     updatedAt: request.updatedAt,
     expiresAt: request.expiresAt,
@@ -40,7 +42,7 @@ function toStatusResponse(request: ReturnType<PendingRequestStore['get']>) {
 export function createBazanticRouter({
   store,
   adapter,
-  requestId = randomUUID,
+  requestId = () => `0x${randomBytes(32).toString('hex')}`,
   defaultRequestTtlMs = 15 * 60 * 1_000,
 }: BazanticRoutesDependencies): Router {
   const router = Router();
