@@ -31,6 +31,7 @@ export function createApp(config: AppConfig, dependencies: AppDependencies = {})
   app.use('/api/bazantic', createBazanticRouter({
     store: requestStore,
     adapter: bazantic,
+    paymentHeader: config.bazanticPaymentHeader,
     defaultRequestTtlMs: config.pendingRequestTtlMs,
   }));
 

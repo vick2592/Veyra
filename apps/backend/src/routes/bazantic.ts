@@ -6,16 +6,21 @@ import type { BazanticAdapter } from '../services/bazantic.js';
 export type BazanticRoutesDependencies = {
   store: PendingRequestStore;
   adapter: BazanticAdapter;
+  paymentHeader?: string;
   requestId?: () => string;
   defaultRequestTtlMs?: number;
 };
 
-function getPaymentHeaders(request: Request): Record<string, string | string[] | undefined> {
+function getPaymentHeaders(
+  request: Request,
+  paymentHeader = 'x-payment-reference',
+): Record<string, string | string[] | undefined> {
   return {
     'x-payment': request.headers['x-payment'],
     'x-payment-signature': request.headers['x-payment-signature'],
     'payment-signature': request.headers['payment-signature'],
     'x-payment-reference': request.headers['x-payment-reference'],
+    [paymentHeader]: request.headers[paymentHeader.toLowerCase()],
   };
 }
 
@@ -42,6 +47,7 @@ function toStatusResponse(request: ReturnType<PendingRequestStore['get']>) {
 export function createBazanticRouter({
   store,
   adapter,
+  paymentHeader,
   requestId = () => `0x${randomBytes(32).toString('hex')}`,
   defaultRequestTtlMs = 15 * 60 * 1_000,
 }: BazanticRoutesDependencies): Router {
@@ -64,7 +70,7 @@ export function createBazanticRouter({
 
     let payment;
     try {
-      payment = await adapter.settle(parsed, getPaymentHeaders(request));
+      payment = await adapter.settle(parsed, getPaymentHeaders(request, paymentHeader));
     } catch {
       response.status(502).json({error: 'Payment settlement failed'});
       return;

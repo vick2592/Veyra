@@ -36,6 +36,28 @@ describe('Bazantic routes', () => {
     expect(harness.settlement).toHaveBeenCalledOnce();
   });
 
+  it('forwards a configured payment header to settlement', async () => {
+    const app = express();
+    app.use(express.json());
+    const settlement = vi.fn().mockResolvedValue({reference: 'payment-custom', settledAt: '2026-09-09T00:00:00.000Z'});
+    app.use('/api/bazantic', createBazanticRouter({
+      store: createPendingRequestStore(),
+      adapter: createBazanticAdapter(settlement),
+      paymentHeader: 'x-bazantic-payment',
+      requestId: () => 'request-custom',
+    }));
+
+    const response = await request(app)
+      .post('/api/bazantic/requests')
+      .set('x-bazantic-payment', 'custom-payment')
+      .send({secretIdentifier: 'ledger-key-42', agentAddress: '0xagent', idempotencyKey: 'custom'});
+
+    expect(response.status).toBe(202);
+    expect(settlement).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      'x-bazantic-payment': 'custom-payment',
+    }));
+  });
+
   it('rejects an unpaid request without creating queue state', async () => {
     const harness = createHarness();
     harness.settlement.mockResolvedValueOnce(undefined);
