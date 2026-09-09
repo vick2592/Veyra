@@ -13,7 +13,13 @@ const configSchema = z.object({
   WALLET_PASS: z.string().min(1).optional(),
   SECRETS_ENC_PATH: z.string().min(1).default(path.resolve(process.cwd(), '../../secrets.enc')),
   AGENT_API_URL: z.string().url().default('https://api.openai.com/v1/models'),
-  BAZANTIC_PAYMENT_HEADER: z.string().min(1).default('x-payment-reference'),
+  BAZANTIC_PAYMENT_HEADER: z.string().min(1).default('Payment-Signature'),
+  BAZANTIC_X402_VERSION: z.coerce.number().int().refine((value) => value === 1 || value === 2).default(2),
+  BAZANTIC_NETWORK: z.string().min(1).default('base-sepolia'),
+  BAZANTIC_ASSET: z.string().regex(/^0x[0-9a-fA-F]{40}$/).default('0x036CbD53842c5426634e7929541eC2318f3dCF7e'),
+  BAZANTIC_PAY_TO: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(),
+  BAZANTIC_AMOUNT: z.string().regex(/^\d+$/).default('10000'),
+  BAZANTIC_MAX_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(300),
   PENDING_REQUEST_TTL_MS: z.coerce.number().int().positive().default(15 * 60 * 1_000),
   RPC_URL: z.string().url().optional(),
   CHAIN_ID: z.coerce.number().int().positive().default(84532),
@@ -35,6 +41,12 @@ export type AppConfig = {
   secretsEncPath: string;
   agentApiUrl: string;
   bazanticPaymentHeader: string;
+  bazanticX402Version: 1 | 2;
+  bazanticNetwork: string;
+  bazanticAsset: `0x${string}`;
+  bazanticPayTo?: `0x${string}`;
+  bazanticAmount: string;
+  bazanticMaxTimeoutSeconds: number;
   pendingRequestTtlMs: number;
   rpcUrl?: string;
   chainId: number;
@@ -59,6 +71,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     secretsEncPath: parsed.SECRETS_ENC_PATH,
     agentApiUrl: parsed.AGENT_API_URL,
     bazanticPaymentHeader: parsed.BAZANTIC_PAYMENT_HEADER,
+    bazanticX402Version: parsed.BAZANTIC_X402_VERSION as 1 | 2,
+    bazanticNetwork: parsed.BAZANTIC_NETWORK,
+    bazanticAsset: parsed.BAZANTIC_ASSET as `0x${string}`,
+    ...(parsed.BAZANTIC_PAY_TO === undefined ? {} : {bazanticPayTo: parsed.BAZANTIC_PAY_TO as `0x${string}`}),
+    bazanticAmount: parsed.BAZANTIC_AMOUNT,
+    bazanticMaxTimeoutSeconds: parsed.BAZANTIC_MAX_TIMEOUT_SECONDS,
     pendingRequestTtlMs: parsed.PENDING_REQUEST_TTL_MS,
     ...(parsed.RPC_URL === undefined ? {} : { rpcUrl: parsed.RPC_URL }),
     chainId: parsed.CHAIN_ID,

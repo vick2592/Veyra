@@ -25,7 +25,7 @@ The Web2 applications under `apps/` are independently installable with npm. The 
 6. The chain listener claims the matching request, decrypts the allowlisted Ledger Key Ring secret, and calls the provider.
 7. The agent polls `GET /api/bazantic/requests/:requestId` for the final result.
 
-The backend queue is an in-memory Map and is an ephemeral relay only. Authorization trust and replay protection remain on-chain in `VeyraRegistry`; a backend restart discards uncompleted relay requests.
+The backend queue is an in-memory Map and is an ephemeral relay only. Authorization trust and replay protection remain on-chain in `VeyraRegistry`; a backend restart discards uncompleted relay requests. Bazantic is intended to host the external agent gateway and payment rails in front of this API; the provider submission document is `docs/veyra-bazantic-openapi.yaml`.
 
 ### On-chain authorization flow
 

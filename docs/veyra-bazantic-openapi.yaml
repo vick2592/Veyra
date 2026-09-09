@@ -1,0 +1,139 @@
+openapi: 3.1.0
+info:
+  title: Veyra Agent Capability API
+  version: 0.1.0
+  description: >-
+    Paid agent capability requests queued for human World ID Face Auth
+    authorization. Bazantic provides the hosted agent gateway and payment
+    rails in front of this API.
+servers:
+  - url: http://localhost:3001
+    description: Local Veyra backend
+paths:
+  /api/bazantic/requests:
+    post:
+      operationId: createCapabilityRequest
+      summary: Queue an agent capability request
+      description: >-
+        Submit a capability request. The Bazantic gateway handles agent
+        discovery and payment before forwarding the request to Veyra.
+      x-agent-hint: >-
+        Use a stable idempotencyKey when retrying. The request remains pending
+        until a human approves it with World ID Face Auth.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRequest'
+      responses:
+        '202':
+          description: Request accepted and waiting for human authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestStatus'
+        '400':
+          description: Invalid request
+        '402':
+          description: Payment required when using direct x402 mode
+        '502':
+          description: Payment gateway settlement failure
+  /api/bazantic/requests/{requestId}:
+    get:
+      operationId: getCapabilityRequest
+      summary: Poll a capability request
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Current request status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestStatus'
+        '404':
+          description: Request not found or expired
+  /api/bazantic/pending:
+    get:
+      operationId: listPendingCapabilityRequests
+      summary: List requests awaiting human authorization
+      description: >-
+        Frontend-only relay endpoint. It is used by the Veyra human approval
+        surface to find queued requests.
+      responses:
+        '200':
+          description: Pending requests
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requests]
+                properties:
+                  requests:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RequestStatus'
+components:
+  parameters:
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^0x[0-9a-fA-F]{64}$'
+  schemas:
+    CreateRequest:
+      type: object
+      required: [secretIdentifier, agentAddress, idempotencyKey]
+      properties:
+        secretIdentifier:
+          type: string
+          minLength: 1
+          description: Allowlisted Ledger Key Ring identifier, never a raw secret.
+        agentAddress:
+          type: string
+          description: Wallet address that will be authorized on-chain.
+        input:
+          description: Optional provider input forwarded to the capability.
+        idempotencyKey:
+          type: string
+          minLength: 1
+          maxLength: 200
+        expiresAt:
+          type: string
+          format: date-time
+    RequestStatus:
+      type: object
+      required: [requestId, status, createdAt, updatedAt, expiresAt]
+      properties:
+        requestId:
+          type: string
+          pattern: '^0x[0-9a-fA-F]{64}$'
+        status:
+          type: string
+          enum: [pending_human_auth, executing, completed, failed]
+        agentAddress:
+          type: string
+        secretIdentifier:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        result:
+          description: Present only when status is completed.
+        error:
+          type: object
+          description: Sanitized error present only when status is failed.
+          properties:
+            code:
+              type: string
+            message:
+              type: string
