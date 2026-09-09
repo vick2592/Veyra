@@ -19,23 +19,26 @@ blockchain/  Web3 packages, contracts, and tooling
 
 ### Request flow
 
-1. The frontend requests a short-lived RP signature from `POST /api/world-id/sign`.
-2. The frontend connects an injected wallet, collects a Ledger Key Ring identifier, builds an `rp_context`, and opens `IDKitRequestWidget` with that identifier as the action and the `selfieCheckLegacy()` preset.
-3. After World ID returns, the frontend sends `{ rp_id, idkitResponse }` unchanged to the backend.
-4. The backend forwards the complete IDKit response to the World ID 4.0 verification endpoint.
-5. Only after a successful verification response does the backend use `wallet-cli` through `execFile` to decrypt the Ledger Key Ring into a private temporary directory.
-6. The allowlisted key is read in memory, the temporary plaintext is removed, and the mock provider request is returned to the frontend.
+1. An agent submits a paid request to `POST /api/bazantic/requests` with an idempotency key.
+2. The Bazantic adapter validates the request and payment headers before placing it in the ephemeral `pending_human_auth` Map queue.
+3. The endpoint returns `202` with a `requestId`; the frontend polls `GET /api/bazantic/pending` and lets the human select a request.
+4. The frontend requests a short-lived RP signature from `POST /api/world-id/sign`, opens `IDKitRequestWidget`, and submits the World ID proof through `VeyraRegistry.authorizeAgent` with the selected request ID.
+5. The registry verifies the proof and emits `AgentAuthorized(..., requestId)`.
+6. The chain listener waits for confirmations, claims the matching queued request, decrypts the allowlisted Ledger Key Ring secret, and calls the configured provider.
+7. The agent polls `GET /api/bazantic/requests/:requestId` for `completed` or `failed` and receives only the final result or a sanitized error.
+
+The current `services/bazantic.ts` module is deliberately an adapter seam. Its settlement function is injected by the app and currently accepts the configured payment-reference header; the live Bazantic SDK/facilitator implementation must be supplied once the bounty API credentials and exact settlement contract are confirmed.
 
 ### Decentralized authorization flow
 
 1. `blockchain/packages/contracts/src/VeyraRegistry.sol` stores Ledger Key Ring identifiers, never plaintext secrets.
 2. A user can register an identifier with `registerSecret` and submit a World ID proof through `authorizeAgent`.
 3. The registry verifies the proof against its constructor-fixed World ID group and external nullifier, then records the nullifier so the proof cannot be replayed.
-4. A successful authorization emits `AgentAuthorized`.
-5. The backend listener watches only the configured registry address, waits for the configured confirmation depth, and passes the event identifier through the shared agent execution path.
-6. The listener uses the existing allowlisted Ledger Key Ring decryption flow and calls the configured agent provider without logging or persisting the plaintext API key.
+5. A successful authorization emits `AgentAuthorized` with the request ID.
+6. The backend listener watches only the configured registry address, waits for the configured confirmation depth, claims the matching in-memory request, and passes its identifier through the shared agent execution path.
+7. The listener uses the existing allowlisted Ledger Key Ring decryption flow and calls the configured agent provider without logging or persisting the plaintext API key.
 
-The listener is a background, read-only service. RPC failures do not block the HTTP server; watcher errors are retried, and duplicate event delivery is suppressed in memory.
+The listener is a background, read-only service. RPC failures do not block the HTTP server; watcher errors are retried, and duplicate event delivery is suppressed in memory. The queue is intentionally ephemeral: backend restart loses pending requests, so durable queue persistence is not part of the decentralized trust layer or this deployment mode.
 
 ### Frontend Web3 flow
 
@@ -60,7 +63,7 @@ cp .env.example .env
 npm run dev
 ```
 
-To enable the blockchain listener, also set `RPC_URL`, `REGISTRY_ADDRESS`, and optionally `CHAIN_ID`, `LISTENER_STARTING_BLOCK`, `LISTENER_CONFIRMATIONS`, and `LISTENER_POLLING_INTERVAL_MS`.
+To enable the blockchain listener, also set `RPC_URL`, `REGISTRY_ADDRESS`, and optionally `CHAIN_ID`, `LISTENER_STARTING_BLOCK`, `LISTENER_CONFIRMATIONS`, and `LISTENER_POLLING_INTERVAL_MS`. Set `BAZANTIC_PAYMENT_HEADER` and `PENDING_REQUEST_TTL_MS` for the relay adapter.
 
 The Express backend listens on `http://localhost:3001`.
 

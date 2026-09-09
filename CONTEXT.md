@@ -17,13 +17,15 @@ The Web2 applications under `apps/` are independently installable with npm. The 
 
 ## Runtime Flow
 
-1. The Next.js frontend displays the Veyra Agent Execution gate.
-2. The frontend requests a signed RP context from `POST /api/world-id/sign`.
-3. The frontend connects an injected wallet, opens `IDKitRequestWidget` with `selfieCheckLegacy()`, uses the entered secret identifier as the action, and includes the wallet address as the proof signal.
-4. After World ID returns, the frontend posts `{ rp_id, idkitResponse }` unchanged to `http://localhost:3001/api/execute-agent`.
-5. The Express backend forwards the complete response to `https://developer.world.org/api/v4/verify/{rp_id}`.
-6. Only after a successful verification response does the backend invoke the globally installed `wallet-cli` with `execFile`, decrypt the Ledger Key Ring output into a private temporary directory, read the allowlisted `AI_API_KEY` in memory, and remove the temporary plaintext directory in a `finally` block.
-7. The backend performs the mock agent-provider request and returns the result to the frontend. Raw keys are never sent to the browser or agent.
+1. An agent submits a paid capability request to `POST /api/bazantic/requests`.
+2. The backend validates the payment adapter response and creates an ephemeral `pending_human_auth` request.
+3. The frontend polls `GET /api/bazantic/pending`, lets the user select a request, and opens World ID Face Auth.
+4. The frontend calls `VeyraRegistry.authorizeAgent` with the selected request ID and World ID proof.
+5. The registry emits `AgentAuthorized` with that request ID after proof verification.
+6. The chain listener claims the matching request, decrypts the allowlisted Ledger Key Ring secret, and calls the provider.
+7. The agent polls `GET /api/bazantic/requests/:requestId` for the final result.
+
+The backend queue is an in-memory Map and is an ephemeral relay only. Authorization trust and replay protection remain on-chain in `VeyraRegistry`; a backend restart discards uncompleted relay requests.
 
 ### On-chain authorization flow
 
@@ -31,7 +33,7 @@ The Web2 applications under `apps/` are independently installable with npm. The 
 2. `registerSecret` appends an identifier for the caller.
 3. `authorizeAgent` verifies the caller's World ID proof through `IWorldID`, using the constructor-fixed group and external nullifier hash.
 4. The contract records each nullifier after successful verification and rejects replayed nullifiers before emitting `AgentAuthorized`.
-5. `apps/backend/src/services/chainListener.ts` watches the configured registry address with `viem`, waits for configured transaction confirmations, and processes each event once per running process.
+5. `apps/backend/src/services/chainListener.ts` watches the configured registry address with `viem`, waits for configured transaction confirmations, and claims the matching request ID from the in-memory queue.
 6. The listener reuses the shared provider execution function and existing `SecretKeyring` allowlist. Decrypted key material is held only for the provider request and is never logged or persisted.
 
 The listener is intentionally asynchronous and read-only. It retries watcher failures, suppresses duplicate or concurrent log delivery, and does not make the HTTP server dependent on RPC availability. Durable log cursors and exactly-once processing across restarts are not implemented yet.

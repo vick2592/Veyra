@@ -21,14 +21,18 @@ export function createApp(config: AppConfig, dependencies: AppDependencies = {})
 
   const requestStore = dependencies.requestStore ?? createPendingRequestStore();
   const bazantic = createBazanticAdapter(async (_request, headers) => {
-    const paymentReference = headers['x-payment-reference'] ?? headers['x-payment'];
+    const paymentReference = headers[config.bazanticPaymentHeader] ?? headers['x-payment'];
     if (paymentReference === undefined) {
       return undefined;
     }
     const reference = Array.isArray(paymentReference) ? paymentReference[0] : paymentReference;
     return reference === undefined ? undefined : {reference, settledAt: new Date().toISOString()};
   });
-  app.use('/api/bazantic', createBazanticRouter({store: requestStore, adapter: bazantic}));
+  app.use('/api/bazantic', createBazanticRouter({
+    store: requestStore,
+    adapter: bazantic,
+    defaultRequestTtlMs: config.pendingRequestTtlMs,
+  }));
 
   if (
     config.worldIdAppId !== undefined &&
