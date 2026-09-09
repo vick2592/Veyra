@@ -174,12 +174,14 @@ export function getWorldIdConfig(config: {
   worldIdRpId?: string;
   worldIdSigningKey?: string;
   worldAction?: string;
+  worldIdApiBaseUrl?: string;
 }): WorldIdConfig {
   const parsed = z.object({
     worldIdAppId: z.string().regex(/^app_/),
     worldIdRpId: z.string().regex(/^rp_/),
     worldIdSigningKey: z.string().regex(/^(0x)?[0-9a-fA-F]{64}$/),
     worldAction: z.string().min(1),
+    worldIdApiBaseUrl: z.string().url().default('https://developer.world.org'),
   }).safeParse(config);
 
   if (!parsed.success) {
@@ -191,5 +193,6 @@ export function getWorldIdConfig(config: {
     rpId: parsed.data.worldIdRpId,
     signingKey: parsed.data.worldIdSigningKey,
     action: parsed.data.worldAction,
+    apiBaseUrl: parsed.data.worldIdApiBaseUrl,
   };
 }
