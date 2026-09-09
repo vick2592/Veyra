@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PublicClient } from 'viem';
+import { createPendingRequestStore } from './queue/store.js';
 import { createChainListener } from './services/chainListener.js';
 
 type WatchOptions = {
@@ -22,6 +23,15 @@ function createHarness() {
   const keyring = {decryptSecret: vi.fn().mockResolvedValue('secret-key')};
   const fetchImpl = vi.fn().mockResolvedValue(new Response('{"ok":true}', {status: 200}));
   const logger = {error: vi.fn(), info: vi.fn()};
+  const requestStore = createPendingRequestStore();
+  requestStore.create({
+    requestId: 'request-1',
+    idempotencyKey: 'key-1',
+    paymentReference: 'payment-1',
+    agentAddress: '0xagent',
+    secretIdentifier: 'ledger-key-42',
+    expiresAt: '2999-01-01T00:00:00.000Z',
+  });
   const client = {
     watchEvent,
     waitForTransactionReceipt,
@@ -35,6 +45,7 @@ function createHarness() {
   }, {
     keyring,
     agentConfig: {agentApiUrl: 'https://provider.test'},
+    requestStore,
     fetchImpl,
     logger,
     client,
@@ -46,6 +57,7 @@ function createHarness() {
     waitForTransactionReceipt,
     keyring,
     fetchImpl,
+    requestStore,
     logger,
     unwatch,
     getWatchOptions: () => watchOptions,
@@ -54,7 +66,7 @@ function createHarness() {
 
 function authorizedLog(secretIdentifier = 'ledger-key-42') {
   return {
-    args: {secretIdentifier},
+    args: {secretIdentifier, requestId: 'request-1'},
     transactionHash,
     logIndex: 0,
   };
@@ -91,9 +103,11 @@ describe('chain listener', () => {
       headers: {authorization: 'Bearer secret-key'},
     });
     expect(harness.logger.info).toHaveBeenCalledWith('Processed AgentAuthorized event', {
+      requestId: 'request-1',
       transactionHash,
       logIndex: 0,
     });
+    expect(harness.requestStore.get('request-1')?.state).toBe('completed');
     expect(harness.logger.info).not.toHaveBeenCalledWith(expect.stringContaining('secret-key'), expect.anything());
     harness.listener.stop();
   });
@@ -111,6 +125,7 @@ describe('chain listener', () => {
       'AgentAuthorized processing failed',
       expect.any(Error),
     );
+    expect(harness.requestStore.get('request-1')?.state).toBe('failed');
     harness.listener.stop();
   });
 

@@ -1,10 +1,12 @@
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { createKeyring } from './keyring.js';
+import { createPendingRequestStore } from './queue/store.js';
 import { createChainListener } from './services/chainListener.js';
 
 const config = loadConfig();
-const app = createApp(config);
+const requestStore = createPendingRequestStore();
+const app = createApp(config, {requestStore});
 const listener =
   config.rpcUrl !== undefined &&
   config.registryAddress !== undefined &&
@@ -27,6 +29,7 @@ const listener =
             keyName: 'veyra-root',
           }),
           agentConfig: {agentApiUrl: config.agentApiUrl},
+          requestStore,
         },
       )
     : undefined;

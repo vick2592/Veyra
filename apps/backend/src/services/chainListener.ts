@@ -8,9 +8,10 @@ import {
 import type { AgentExecutorConfig } from '../execute-agent.js';
 import { executeAgentWithSecret } from '../execute-agent.js';
 import type { SecretKeyring } from '../keyring.js';
+import type { PendingRequestStore } from '../queue/store.js';
 
 const agentAuthorizedAbi = parseAbi([
-  'event AgentAuthorized(address indexed user, address agent, string secretIdentifier)',
+  'event AgentAuthorized(address indexed user, address agent, string secretIdentifier, bytes32 requestId)',
 ]);
 
 export type ChainListenerConfig = {
@@ -25,6 +26,7 @@ export type ChainListenerConfig = {
 export type ChainListenerDependencies = {
   keyring: SecretKeyring;
   agentConfig: AgentExecutorConfig;
+  requestStore: PendingRequestStore;
   fetchImpl?: typeof fetch;
   logger?: Pick<Console, 'error' | 'info'>;
   client?: PublicClient;
@@ -38,6 +40,7 @@ export type ChainListener = {
 type AuthorizedLog = {
   args: {
     secretIdentifier?: string;
+    requestId?: string;
   };
   transactionHash: `0x${string}`;
   logIndex: number;
@@ -101,10 +104,10 @@ export function createChainListener(
       return;
     }
 
-    const secretIdentifier = log.args.secretIdentifier;
-    if (secretIdentifier === undefined || secretIdentifier.length === 0) {
+    const requestId = log.args.requestId;
+    if (requestId === undefined || requestId.length === 0) {
       processingLogs.delete(logId);
-      logger.error('AgentAuthorized event did not contain a secret identifier');
+      logger.error('AgentAuthorized event did not contain a request ID');
       return;
     }
 
@@ -113,14 +116,35 @@ export function createChainListener(
         hash: log.transactionHash,
         confirmations: config.confirmations,
       });
-      await executeAgentWithSecret(
-        secretIdentifier,
-        dependencies.keyring,
-        dependencies.agentConfig,
-        dependencies.fetchImpl,
-      );
+      const pendingRequest = dependencies.requestStore.claimForExecution(requestId);
+      if (pendingRequest === undefined) {
+        markLogProcessed(logId);
+        logger.info('Ignored AgentAuthorized event without a pending request', {
+          requestId,
+          transactionHash: log.transactionHash,
+          logIndex: log.logIndex,
+        });
+        return;
+      }
+
+      try {
+        const result = await executeAgentWithSecret(
+          pendingRequest.secretIdentifier,
+          dependencies.keyring,
+          dependencies.agentConfig,
+          dependencies.fetchImpl,
+        );
+        dependencies.requestStore.transition(requestId, 'completed', {result});
+      } catch (error) {
+        dependencies.requestStore.transition(requestId, 'failed', {
+          errorCode: 'execution_failed',
+          errorMessage: error instanceof Error ? error.message : 'Agent execution failed',
+        });
+        throw error;
+      }
       markLogProcessed(logId);
       logger.info('Processed AgentAuthorized event', {
+        requestId,
         transactionHash: log.transactionHash,
         logIndex: log.logIndex,
       });

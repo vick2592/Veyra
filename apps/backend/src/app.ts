@@ -4,17 +4,22 @@ import type { AppConfig } from './config.js';
 import { createExecuteAgentHandler } from './execute-agent.js';
 import { createKeyring } from './keyring.js';
 import { createPendingRequestStore } from './queue/store.js';
+import type { PendingRequestStore } from './queue/store.js';
 import { createBazanticRouter } from './routes/bazantic.js';
 import { createBazanticAdapter } from './services/bazantic.js';
 import { createWorldIdSignHandler, createWorldIdVerifier, getWorldIdConfig } from './world-id.js';
 
-export function createApp(config: AppConfig): Express {
+export type AppDependencies = {
+  requestStore?: PendingRequestStore;
+};
+
+export function createApp(config: AppConfig, dependencies: AppDependencies = {}): Express {
   const app = express();
 
   app.use(cors({ origin: config.corsOrigin }));
   app.use(express.json());
 
-  const requestStore = createPendingRequestStore();
+  const requestStore = dependencies.requestStore ?? createPendingRequestStore();
   const bazantic = createBazanticAdapter(async (_request, headers) => {
     const paymentReference = headers['x-payment-reference'] ?? headers['x-payment'];
     if (paymentReference === undefined) {
