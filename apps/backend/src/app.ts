@@ -20,6 +20,34 @@ export function createApp(config: AppConfig, dependencies: AppDependencies = {})
   app.use(express.json());
 
   const requestStore = dependencies.requestStore ?? createPendingRequestStore();
+  const paymentRequired = config.bazanticPayTo === undefined
+    ? undefined
+    : config.bazanticX402Version === 2
+      ? {
+          x402Version: 2,
+          accepts: [{
+            scheme: 'exact',
+            network: `eip155:${config.chainId}`,
+            amount: config.bazanticAmount,
+            asset: config.bazanticAsset,
+            payTo: config.bazanticPayTo,
+            maxTimeoutSeconds: config.bazanticMaxTimeoutSeconds,
+            extra: {name: 'USDC', version: '2'},
+          }],
+          resource: {url: '/api/bazantic/requests', description: 'Veyra agent capability request', mimeType: 'application/json'},
+        }
+      : {
+          x402Version: 1,
+          accepts: [{
+            scheme: 'exact',
+            network: config.bazanticNetwork,
+            maxAmountRequired: config.bazanticAmount,
+            asset: config.bazanticAsset,
+            payTo: config.bazanticPayTo,
+            maxTimeoutSeconds: config.bazanticMaxTimeoutSeconds,
+            extra: {name: 'USDC', version: '2'},
+          }],
+        };
   const bazantic = createBazanticAdapter(async (_request, headers) => {
     const paymentReference = headers[config.bazanticPaymentHeader] ?? headers['x-payment'];
     if (paymentReference === undefined) {
@@ -32,6 +60,7 @@ export function createApp(config: AppConfig, dependencies: AppDependencies = {})
     store: requestStore,
     adapter: bazantic,
     paymentHeader: config.bazanticPaymentHeader,
+    ...(paymentRequired === undefined ? {} : {paymentRequired}),
     defaultRequestTtlMs: config.pendingRequestTtlMs,
   }));
 

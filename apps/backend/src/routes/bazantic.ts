@@ -7,6 +7,8 @@ export type BazanticRoutesDependencies = {
   store: PendingRequestStore;
   adapter: BazanticAdapter;
   paymentHeader?: string;
+  paymentRequired?: Record<string, unknown>;
+  receiptHeader?: string;
   requestId?: () => string;
   defaultRequestTtlMs?: number;
 };
@@ -48,6 +50,8 @@ export function createBazanticRouter({
   store,
   adapter,
   paymentHeader,
+  paymentRequired,
+  receiptHeader = 'payment-response',
   requestId = () => `0x${randomBytes(32).toString('hex')}`,
   defaultRequestTtlMs = 15 * 60 * 1_000,
 }: BazanticRoutesDependencies): Router {
@@ -76,7 +80,10 @@ export function createBazanticRouter({
       return;
     }
     if (payment === undefined) {
-      response.status(402).json({error: 'A valid Bazantic payment is required'});
+      if (paymentRequired !== undefined) {
+        response.setHeader('WWW-Authenticate', `x402 version="${paymentRequired.x402Version ?? 2}"`);
+      }
+      response.status(402).json(paymentRequired ?? {error: 'A valid Bazantic payment is required'});
       return;
     }
 
@@ -89,6 +96,9 @@ export function createBazanticRouter({
       secretIdentifier: parsed.secretIdentifier,
       expiresAt,
     });
+    if (receiptHeader.length > 0) {
+      response.setHeader(receiptHeader, payment.reference);
+    }
     response.status(202).json(toStatusResponse(pending));
   });
 
