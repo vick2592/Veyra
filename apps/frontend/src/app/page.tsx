@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { encodePacked, keccak256, toBytes } from 'viem';
 import { useAccount, useConnect, useWriteContract } from 'wagmi';
 import {
   IDKitRequestWidget,
@@ -11,24 +10,6 @@ import {
 } from '@worldcoin/idkit';
 
 type RequestState = 'idle' | 'submitting' | 'success' | 'error';
-
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const;
-
-// The registry keys secrets by keccak256(name), matching CapabilityRegistry's resource.
-function toSecretId(secretIdentifier: string): `0x${string}` {
-  return keccak256(toBytes(secretIdentifier));
-}
-
-// The contract verifies the proof against keccak256(user, agent, secretId), so the
-// signal must commit to the same three values. Signing only the address would prove a
-// human acted without constraining WHAT they approved — and every proof would fail.
-function buildSignal(user: `0x${string}`, agent: `0x${string}`, secretIdentifier: string): `0x${string}` {
-  return encodePacked(
-    ['address', 'address', 'bytes32'],
-    [user, agent, toSecretId(secretIdentifier)],
-  );
-}
-
 
 const worldAppId = process.env.NEXT_PUBLIC_WORLD_ID_APP_ID ?? '';
 const worldRpId = process.env.NEXT_PUBLIC_WORLD_ID_RP_ID ?? '';
@@ -41,11 +22,11 @@ const registryAbi = [{
   stateMutability: 'nonpayable',
   inputs: [
     {name: 'agentAddress', type: 'address'},
-    {name: 'secretId', type: 'bytes32'},
+    {name: 'secretIdentifier', type: 'string'},
+    {name: 'requestId', type: 'bytes32'},
     {name: 'root', type: 'uint256'},
     {name: 'nullifierHash', type: 'uint256'},
     {name: 'proof', type: 'uint256[8]'},
-    {name: 'requestId', type: 'bytes32'},
   ],
   outputs: [],
 }] as const;
@@ -249,11 +230,11 @@ export default function Home() {
       functionName: 'authorizeAgent',
       args: [
         address,
-        toSecretId(selectedRequest.secretIdentifier),
+        selectedRequest.secretIdentifier,
+        selectedRequest.requestId as `0x${string}`,
         BigInt(onChainProof.root),
         BigInt(onChainProof.nullifierHash),
         onChainProof.proof.map((value) => BigInt(value)) as unknown as readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint],
-        selectedRequest.requestId as `0x${string}`,
       ],
     });
     setMessage('Authorization submitted. Waiting for the chain listener.');
@@ -393,16 +374,7 @@ export default function Home() {
               rp_context={rpContext}
               environment="staging"
               allow_legacy_proofs={true}
-              preset={selfieCheckLegacy({
-                signal: buildSignal(
-                  address ?? ZERO_ADDRESS,
-                  // NOTE: the call site passes the connected wallet as agentAddress, so
-                  // the signal must match. If that is meant to be the agent's own
-                  // address, change both together or every proof will fail.
-                  address ?? ZERO_ADDRESS,
-                  selectedRequest?.secretIdentifier ?? secretIdentifier.trim(),
-                ),
-              })}
+              preset={selfieCheckLegacy({signal: address})}
               handleVerify={handleVerify}
               onSuccess={handleSuccess}
               onError={handleError}
