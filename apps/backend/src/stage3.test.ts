@@ -99,6 +99,46 @@ describe('World ID 4 RP integration', () => {
       body: JSON.stringify(idKitResponse),
     });
   });
+
+  it('logs the status and raw body before rejecting a non-OK response', async () => {
+    const rawBody = '{"code":"invalid_proof"}';
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(rawBody, {
+      status: 400,
+      statusText: 'Bad Request',
+    }));
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const verifier = createWorldIdVerifier(config, fetchImpl);
+
+    await expect(verifier('rp_test', idKitResponse)).rejects.toMatchObject({
+      name: 'WorldIdVerificationError',
+      statusCode: 400,
+    });
+    expect(consoleError).toHaveBeenCalledWith('World ID verification response', {
+      status: 400,
+      statusText: 'Bad Request',
+      body: rawBody,
+    });
+
+    consoleError.mockRestore();
+  });
+
+  it('parses a successful response from the captured raw body', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response('{"success":true}', { status: 200 }));
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const verifier = createWorldIdVerifier({
+      ...config,
+      apiBaseUrl: 'https://staging-developer.world.org',
+    }, fetchImpl);
+
+    await expect(verifier('rp_test', idKitResponse)).resolves.toEqual({ nullifier: 'nullifier' });
+    expect(fetchImpl).toHaveBeenCalledWith('https://staging-developer.world.org/api/v4/verify/rp_test', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(idKitResponse),
+    });
+
+    consoleError.mockRestore();
+  });
 });
 
 describe('keyring', () => {
