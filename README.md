@@ -6,7 +6,7 @@ Veyra is a capability broker that lets an AI agent request sensitive work withou
 
 ## Status
 
-The Web2 application is successfully scaffolded and built. The repository contains an independently installable Next.js frontend and Express backend, plus a separate Web3 workspace for blockchain packages and contracts.
+The application is scaffolded and built. The repository contains an independently installable Next.js frontend and Express backend, plus a separate Web3 workspace containing the decentralized registry and blockchain tooling.
 
 ## Architecture
 
@@ -25,6 +25,17 @@ blockchain/  Web3 packages, contracts, and tooling
 4. The backend forwards the complete IDKit response to the World ID 4.0 verification endpoint.
 5. Only after a successful verification response does the backend use `wallet-cli` through `execFile` to decrypt the Ledger Key Ring into a private temporary directory.
 6. The allowlisted key is read in memory, the temporary plaintext is removed, and the mock provider request is returned to the frontend.
+
+### Decentralized authorization flow
+
+1. `blockchain/packages/contracts/src/VeyraRegistry.sol` stores Ledger Key Ring identifiers, never plaintext secrets.
+2. A user can register an identifier with `registerSecret` and submit a World ID proof through `authorizeAgent`.
+3. The registry verifies the proof against its constructor-fixed World ID group and external nullifier, then records the nullifier so the proof cannot be replayed.
+4. A successful authorization emits `AgentAuthorized`.
+5. The backend listener watches only the configured registry address, waits for the configured confirmation depth, and passes the event identifier through the shared agent execution path.
+6. The listener uses the existing allowlisted Ledger Key Ring decryption flow and calls the configured agent provider without logging or persisting the plaintext API key.
+
+The listener is a background, read-only service. RPC failures do not block the HTTP server; watcher errors are retried, and duplicate event delivery is suppressed in memory.
 
 ## Prerequisites
 
@@ -45,6 +56,8 @@ cp .env.example .env
 npm run dev
 ```
 
+To enable the blockchain listener, also set `RPC_URL`, `REGISTRY_ADDRESS`, and optionally `CHAIN_ID`, `LISTENER_STARTING_BLOCK`, `LISTENER_CONFIRMATIONS`, and `LISTENER_POLLING_INTERVAL_MS`.
+
 The Express backend listens on `http://localhost:3001`.
 
 ### Frontend
@@ -64,8 +77,10 @@ The Next.js frontend listens on `http://localhost:3000` and calls `http://localh
 ```bash
 cd apps/backend && npm run typecheck && npm test && npm run build
 cd apps/frontend && npm run typecheck && npm run build
+forge build --root blockchain/packages/contracts
+forge test --root blockchain/packages/contracts -vv
 ```
 
 ## Web3 Workspace
 
-The `blockchain/` directory is separate from the Web2 apps. It contains the Web3 packages, smart contracts, and blockchain-specific workspace configuration. Changes to blockchain packages do not require joining or modifying the independent npm projects under `apps/`.
+The `blockchain/` directory is separate from the Web2 apps. It contains the Web3 packages, smart contracts, and blockchain-specific workspace configuration. The Veyra registry is at `blockchain/packages/contracts/src/VeyraRegistry.sol`; the existing `CapabilityRegistry.sol` remains a separate audit registry. Changes to blockchain packages do not require joining or modifying the independent npm projects under `apps/`.

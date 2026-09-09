@@ -2,7 +2,7 @@
 
 ## Build Status
 
-Veyra is successfully scaffolded and built as a two-part Web2 application with a separate Web3 workspace. The completed flow gates agent execution with World ID's RP architecture, then lets the backend broker access an allowlisted API key through the Ledger Key Ring.
+Veyra is successfully scaffolded and built as a Web2 application with a separate Web3 workspace. The completed architecture supports both HTTP World ID execution and on-chain World ID authorization through a Solidity registry, while API secrets remain in the Ledger Key Ring.
 
 ## Repository Structure
 
@@ -25,6 +25,17 @@ The Web2 applications under `apps/` are independently installable with npm. The 
 6. Only after a successful verification response does the backend invoke the globally installed `wallet-cli` with `execFile`, decrypt the Ledger Key Ring output into a private temporary directory, read the allowlisted `AI_API_KEY` in memory, and remove the temporary plaintext directory in a `finally` block.
 7. The backend performs the mock agent-provider request and returns the result to the frontend. Raw keys are never sent to the browser or agent.
 
+### On-chain authorization flow
+
+1. `blockchain/packages/contracts/src/VeyraRegistry.sol` stores each user's Ledger Key Ring secret identifiers in `userSecretIdentifiers`; it does not store plaintext API keys.
+2. `registerSecret` appends an identifier for the caller.
+3. `authorizeAgent` verifies the caller's World ID proof through `IWorldID`, using the constructor-fixed group and external nullifier hash.
+4. The contract records each nullifier after successful verification and rejects replayed nullifiers before emitting `AgentAuthorized`.
+5. `apps/backend/src/services/chainListener.ts` watches the configured registry address with `viem`, waits for configured transaction confirmations, and processes each event once per running process.
+6. The listener reuses the shared provider execution function and existing `SecretKeyring` allowlist. Decrypted key material is held only for the provider request and is never logged or persisted.
+
+The listener is intentionally asynchronous and read-only. It retries watcher failures, suppresses duplicate or concurrent log delivery, and does not make the HTTP server dependent on RPC availability. Durable log cursors and exactly-once processing across restarts are not implemented yet.
+
 ## Backend
 
 The backend lives in `apps/backend/` and listens on port `3001` by default.
@@ -36,9 +47,11 @@ The backend lives in `apps/backend/` and listens on port `3001` by default.
 - Verification payload: complete IDKit response, forwarded without legacy field remapping
 - Secret custody: Ledger Key Ring via globally installed `wallet-cli`
 - Action allowlist: `execute-agent` maps to `AI_API_KEY`
+- Shared execution: `executeAgentWithSecret` is used by both HTTP and chain-triggered execution
+- Chain listener: `viem` watcher for `AgentAuthorized`
 - Commands: `npm install`, `npm run dev`, `npm run typecheck`, `npm test`, `npm run build`
 
-The backend expects `WORLD_ID_APP_ID`, `WORLD_ID_RP_ID`, `WORLD_ID_SIGNING_KEY`, `WORLD_ACTION`, and `WALLET_PASS` before the execution route is enabled. The signing key is server-only and must never be exposed to the browser. See `apps/backend/.env.example` for the complete configuration.
+The backend expects `WORLD_ID_APP_ID`, `WORLD_ID_RP_ID`, `WORLD_ID_SIGNING_KEY`, `WORLD_ACTION`, and `WALLET_PASS` before the execution route is enabled. To enable the chain listener, configure `RPC_URL` and `REGISTRY_ADDRESS`; `CHAIN_ID` defaults to Base Sepolia (`84532`), while confirmation depth, polling interval, and an optional starting block are configurable. The signing key is server-only and must never be exposed to the browser. See `apps/backend/.env.example` for the complete configuration.
 
 ## Frontend
 
@@ -59,3 +72,8 @@ Selfie Check is currently exposed by the SDK as the `selfieCheckLegacy()` preset
 ## Web3 Packages
 
 The `blockchain/` directory contains the Web3 packages, contracts, and blockchain-specific workspace configuration. It is separate from the independently installable Web2 applications under `apps/`.
+
+- Veyra authorization registry: `blockchain/packages/contracts/src/VeyraRegistry.sol`
+- Registry tests: `blockchain/packages/contracts/test/VeyraRegistry.t.sol`
+- Existing audit registry: `blockchain/packages/contracts/src/CapabilityRegistry.sol`
+- Contract validation: `forge build --root blockchain/packages/contracts` and `forge test --root blockchain/packages/contracts -vv`
