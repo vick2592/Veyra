@@ -25,13 +25,13 @@ export type WorldIdConfig = {
   appId: string;
   rpId: string;
   signingKey: string;
-  action: string;
   apiBaseUrl?: string;
 };
 
 export type WorldIdVerifier = (
   rpId: string,
   idKitResponse: unknown,
+  expectedAction: string,
 ) => Promise<WorldIdVerificationResult>;
 
 export type WorldIdVerificationResult = {
@@ -53,7 +53,7 @@ export class WorldIdVerificationError extends Error {
 export function createWorldIdSignHandler(config: WorldIdConfig) {
   return (request: Request, response: ExpressResponse): void => {
     const parsed = signRequestSchema.safeParse(request.body);
-    if (!parsed.success || parsed.data.action !== config.action) {
+    if (!parsed.success) {
       response.status(400).json({ error: 'The requested action is not allowed' });
       return;
     }
@@ -61,7 +61,7 @@ export function createWorldIdSignHandler(config: WorldIdConfig) {
     try {
       const signature = signRequest({
         signingKeyHex: config.signingKey,
-        action: config.action,
+        action: parsed.data.action,
       });
 
       response.json({
@@ -83,7 +83,7 @@ export function createWorldIdVerifier(
 ): WorldIdVerifier {
   const apiBaseUrl = config.apiBaseUrl ?? 'https://developer.world.org';
 
-  return async (rpId, input): Promise<WorldIdVerificationResult> => {
+  return async (rpId, input, expectedAction): Promise<WorldIdVerificationResult> => {
     if (rpId !== config.rpId) {
       throw new WorldIdVerificationError('World ID RP ID mismatch', 400);
     }
@@ -93,10 +93,7 @@ export function createWorldIdVerifier(
       throw new WorldIdVerificationError('A complete IDKit response is required', 400);
     }
 
-    if (
-      idKitResponse.data.action !== undefined &&
-      idKitResponse.data.action !== config.action
-    ) {
+    if (idKitResponse.data.action !== expectedAction) {
       throw new WorldIdVerificationError('World ID action mismatch', 400);
     }
 
@@ -173,26 +170,23 @@ export function getWorldIdConfig(config: {
   worldIdAppId?: string;
   worldIdRpId?: string;
   worldIdSigningKey?: string;
-  worldAction?: string;
   worldIdApiBaseUrl?: string;
 }): WorldIdConfig {
   const parsed = z.object({
     worldIdAppId: z.string().regex(/^app_/),
     worldIdRpId: z.string().regex(/^rp_/),
     worldIdSigningKey: z.string().regex(/^(0x)?[0-9a-fA-F]{64}$/),
-    worldAction: z.string().min(1),
     worldIdApiBaseUrl: z.string().url().default('https://developer.world.org'),
   }).safeParse(config);
 
   if (!parsed.success) {
-    throw new Error('WORLD_ID_APP_ID, WORLD_ID_RP_ID, WORLD_ID_SIGNING_KEY, and WORLD_ACTION must be configured');
+    throw new Error('WORLD_ID_APP_ID, WORLD_ID_RP_ID, and WORLD_ID_SIGNING_KEY must be configured');
   }
 
   return {
     appId: parsed.data.worldIdAppId,
     rpId: parsed.data.worldIdRpId,
     signingKey: parsed.data.worldIdSigningKey,
-    action: parsed.data.worldAction,
     apiBaseUrl: parsed.data.worldIdApiBaseUrl,
   };
 }

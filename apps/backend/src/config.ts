@@ -9,7 +9,6 @@ const configSchema = z.object({
   WORLD_ID_APP_ID: z.string().regex(/^app_/).optional(),
   WORLD_ID_RP_ID: z.string().regex(/^rp_/).optional(),
   WORLD_ID_SIGNING_KEY: z.string().regex(/^(0x)?[0-9a-fA-F]{64}$/).optional(),
-  WORLD_ACTION: z.string().min(1).optional(),
   WORLD_ID_API_BASE_URL: z.string().url().default('https://developer.world.org'),
   WALLET_PASS: z.string().min(1).optional(),
   SECRETS_ENC_PATH: z.string().min(1).default(path.resolve(process.cwd(), '../../secrets.enc')),
@@ -29,7 +28,6 @@ export type AppConfig = {
   worldIdAppId?: string;
   worldIdRpId?: string;
   worldIdSigningKey?: string;
-  worldAction?: string;
   worldIdApiBaseUrl: string;
   walletPass?: string;
   secretsEncPath: string;
@@ -52,7 +50,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     ...(parsed.WORLD_ID_APP_ID === undefined ? {} : { worldIdAppId: parsed.WORLD_ID_APP_ID }),
     ...(parsed.WORLD_ID_RP_ID === undefined ? {} : { worldIdRpId: parsed.WORLD_ID_RP_ID }),
     ...(parsed.WORLD_ID_SIGNING_KEY === undefined ? {} : { worldIdSigningKey: parsed.WORLD_ID_SIGNING_KEY }),
-    ...(parsed.WORLD_ACTION === undefined ? {} : { worldAction: parsed.WORLD_ACTION }),
     worldIdApiBaseUrl: parsed.WORLD_ID_API_BASE_URL,
     ...(parsed.WALLET_PASS === undefined ? {} : { walletPass: parsed.WALLET_PASS }),
     secretsEncPath: parsed.SECRETS_ENC_PATH,

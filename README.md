@@ -56,7 +56,7 @@ The frontend uses Wagmi, Viem, and React Query with an injected wallet connector
 cd apps/backend
 npm install
 cp .env.example .env
-# Set WORLD_ID_APP_ID, WORLD_ID_RP_ID, WORLD_ID_SIGNING_KEY, WORLD_ACTION, and WALLET_PASS in .env
+# Set WORLD_ID_APP_ID, WORLD_ID_RP_ID, WORLD_ID_SIGNING_KEY, and WALLET_PASS in .env
 npm run dev
 ```
 
@@ -110,7 +110,7 @@ forge script script/DeployVeyraRegistry.s.sol:DeployVeyraRegistry \
 
 The placeholder World ID address is deployment-only and cannot verify real proofs. A real World ID verifier address and matching external nullifier configuration are required outside local Anvil. The deployment script is `blockchain/packages/contracts/script/DeployVeyraRegistry.s.sol`.
 
-The backend signing route currently validates actions against the fixed `WORLD_ACTION` configuration. Dynamic secret-identifier actions used by the frontend therefore require the backend World ID action policy to be updated before a complete production flow.
+The backend signs the requested secret identifier and verifies that the returned World ID action matches the same identifier. The legacy HTTP route requires `secretIdentifier` in its request body; the chain listener bypasses this route and trusts only `AgentAuthorized` events from the configured registry.
 
 ## Web3 Workspace
 

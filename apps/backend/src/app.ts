@@ -14,8 +14,7 @@ export function createApp(config: AppConfig): Express {
   if (
     config.worldIdAppId !== undefined &&
     config.worldIdRpId !== undefined &&
-    config.worldIdSigningKey !== undefined &&
-    config.worldAction !== undefined
+    config.worldIdSigningKey !== undefined
   ) {
     const worldIdConfig = getWorldIdConfig(config);
     app.post('/api/world-id/sign', createWorldIdSignHandler(worldIdConfig));
@@ -25,7 +24,6 @@ export function createApp(config: AppConfig): Express {
     config.worldIdAppId !== undefined &&
     config.worldIdRpId !== undefined &&
     config.worldIdSigningKey !== undefined &&
-    config.worldAction !== undefined &&
     config.walletPass !== undefined
   ) {
     const worldIdConfig = getWorldIdConfig(config);

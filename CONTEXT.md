@@ -55,7 +55,7 @@ The backend lives in `apps/backend/` and listens on port `3001` by default.
 - Chain listener: `viem` watcher for `AgentAuthorized`
 - Commands: `npm install`, `npm run dev`, `npm run typecheck`, `npm test`, `npm run build`
 
-The backend expects `WORLD_ID_APP_ID`, `WORLD_ID_RP_ID`, `WORLD_ID_SIGNING_KEY`, `WORLD_ACTION`, and `WALLET_PASS` before the execution route is enabled. To enable the chain listener, configure `RPC_URL` and `REGISTRY_ADDRESS`; `CHAIN_ID` defaults to Base Sepolia (`84532`), while confirmation depth, polling interval, and an optional starting block are configurable. The signing key is server-only and must never be exposed to the browser. See `apps/backend/.env.example` for the complete configuration.
+The backend expects `WORLD_ID_APP_ID`, `WORLD_ID_RP_ID`, `WORLD_ID_SIGNING_KEY`, and `WALLET_PASS` before the execution route is enabled. The signing route signs the requested secret identifier, and the verifier requires the returned World ID action to match that identifier. To enable the chain listener, configure `RPC_URL` and `REGISTRY_ADDRESS`; `CHAIN_ID` defaults to Base Sepolia (`84532`), while confirmation depth, polling interval, and an optional starting block are configurable. The signing key is server-only and must never be exposed to the browser. See `apps/backend/.env.example` for the complete configuration.
 
 ## Frontend
 
@@ -85,4 +85,4 @@ The `blockchain/` directory contains the Web3 packages, contracts, and blockchai
 - Existing audit registry: `blockchain/packages/contracts/src/CapabilityRegistry.sol`
 - Contract validation: `forge build --root blockchain/packages/contracts` and `forge test --root blockchain/packages/contracts -vv`
 
-For local deployment, run `anvil --chain-id 31337`, use one of Anvil's funded private keys as `DEPLOYER_PRIVATE_KEY`, and execute the deployment script with `WORLD_ID_ADDRESS`, `WORLD_ID_GROUP_ID`, and `WORLD_ID_EXTERNAL_NULLIFIER_HASH`. The placeholder verifier address used for local deployment does not validate real World ID proofs. The backend's signing route still enforces the fixed `WORLD_ACTION`, so dynamic secret-identifier actions require a backend action-policy update before production use.
+For local deployment, run `anvil --chain-id 31337`, use one of Anvil's funded private keys as `DEPLOYER_PRIVATE_KEY`, and execute the deployment script with `WORLD_ID_ADDRESS`, `WORLD_ID_GROUP_ID`, and `WORLD_ID_EXTERNAL_NULLIFIER_HASH`. The placeholder verifier address used for local deployment does not validate real World ID proofs. The chain listener does not use the off-chain World ID verifier; it processes only `AgentAuthorized` events emitted by the configured registry.

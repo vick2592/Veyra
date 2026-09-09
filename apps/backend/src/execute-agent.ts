@@ -5,6 +5,7 @@ import { WorldIdVerificationError, type WorldIdVerifier } from './world-id.js';
 
 const executeAgentRequestSchema = z.object({
   rp_id: z.string().regex(/^rp_/),
+  secretIdentifier: z.string().min(1),
   idkitResponse: z.unknown(),
 });
 
@@ -50,12 +51,12 @@ export function createExecuteAgentHandler(
   return async (request: Request, response: Response): Promise<void> => {
     const parsed = executeAgentRequestSchema.safeParse(request.body);
     if (!parsed.success) {
-      response.status(400).json({ error: 'action and proof are required' });
+      response.status(400).json({ error: 'secret identifier and proof are required' });
       return;
     }
 
     try {
-      await verifier(parsed.data.rp_id, parsed.data.idkitResponse);
+      await verifier(parsed.data.rp_id, parsed.data.idkitResponse, parsed.data.secretIdentifier);
     } catch (error) {
       if (error instanceof WorldIdVerificationError) {
         response.status(error.statusCode).json({ error: error.message });
@@ -67,8 +68,8 @@ export function createExecuteAgentHandler(
 
     try {
       response.status(200).json({
-        action: 'execute-agent',
-        result: await executeAgentWithSecret('execute-agent', keyring, config, fetchImpl),
+        action: parsed.data.secretIdentifier,
+        result: await executeAgentWithSecret(parsed.data.secretIdentifier, keyring, config, fetchImpl),
       });
     } catch {
       response.status(502).json({ error: 'Agent execution failed' });

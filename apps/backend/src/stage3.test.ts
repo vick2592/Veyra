@@ -7,7 +7,7 @@ import { createWorldIdSignHandler, createWorldIdVerifier } from './world-id.js';
 const idKitResponse = {
   protocol_version: '4.0',
   nonce: 'nonce',
-  action: 'execute-agent',
+  action: 'ledger-key-42',
   environment: 'production',
   responses: [{
     identifier: 'proof_of_human',
@@ -26,7 +26,7 @@ describe('execute-agent handler', () => {
     const response = createResponse();
 
     await createExecuteAgentHandler(verifier, keyring, { agentApiUrl: 'https://provider.test' }, fetchImpl)(
-      { body: { rp_id: 'rp_test', idkitResponse: idKitResponse } } as never,
+      { body: { rp_id: 'rp_test', secretIdentifier: 'ledger-key-42', idkitResponse: idKitResponse } } as never,
       response as never,
     );
 
@@ -42,7 +42,7 @@ describe('execute-agent handler', () => {
     const response = createResponse();
 
     await createExecuteAgentHandler(verifier, keyring, { agentApiUrl: 'https://provider.test' }, fetchImpl)(
-      { body: { rp_id: 'rp_test', idkitResponse: idKitResponse } } as never,
+      { body: { rp_id: 'rp_test', secretIdentifier: 'ledger-key-42', idkitResponse: idKitResponse } } as never,
       response as never,
     );
 
@@ -59,14 +59,13 @@ describe('World ID 4 RP integration', () => {
     appId: 'app_test',
     rpId: 'rp_test',
     signingKey: '1'.repeat(64),
-    action: 'execute-agent',
   };
 
-  it('signs only the configured action with a server-side key', () => {
+  it('signs the requested secret identifier with a server-side key', () => {
     const response = createResponse();
     const handler = createWorldIdSignHandler(config);
 
-    handler({ body: { action: 'execute-agent' } } as never, response as never);
+    handler({ body: { action: 'ledger-key-42' } } as never, response as never);
 
     expect(response.status).not.toHaveBeenCalled();
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -78,11 +77,11 @@ describe('World ID 4 RP integration', () => {
     }));
   });
 
-  it('rejects signing arbitrary actions', () => {
+  it('rejects requests without an action', () => {
     const response = createResponse();
     const handler = createWorldIdSignHandler(config);
 
-    handler({ body: { action: 'other-action' } } as never, response as never);
+    handler({ body: {} } as never, response as never);
 
     expect(response.status).toHaveBeenCalledWith(400);
     expect(response.json).toHaveBeenCalledWith({ error: 'The requested action is not allowed' });
@@ -92,12 +91,23 @@ describe('World ID 4 RP integration', () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response('{"success":true}', { status: 200 }));
     const verifier = createWorldIdVerifier(config, fetchImpl);
 
-    await expect(verifier('rp_test', idKitResponse)).resolves.toEqual({ nullifier: 'nullifier' });
+    await expect(verifier('rp_test', idKitResponse, 'ledger-key-42')).resolves.toEqual({ nullifier: 'nullifier' });
     expect(fetchImpl).toHaveBeenCalledWith('https://developer.world.org/api/v4/verify/rp_test', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(idKitResponse),
     });
+  });
+
+  it('rejects a proof whose action does not match the requested secret', async () => {
+    const fetchImpl = vi.fn();
+    const verifier = createWorldIdVerifier(config, fetchImpl);
+
+    await expect(verifier('rp_test', idKitResponse, 'other-secret')).rejects.toMatchObject({
+      name: 'WorldIdVerificationError',
+      statusCode: 400,
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it('logs the status and raw body before rejecting a non-OK response', async () => {
@@ -109,7 +119,7 @@ describe('World ID 4 RP integration', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const verifier = createWorldIdVerifier(config, fetchImpl);
 
-    await expect(verifier('rp_test', idKitResponse)).rejects.toMatchObject({
+    await expect(verifier('rp_test', idKitResponse, 'ledger-key-42')).rejects.toMatchObject({
       name: 'WorldIdVerificationError',
       statusCode: 400,
     });
@@ -130,7 +140,7 @@ describe('World ID 4 RP integration', () => {
       apiBaseUrl: 'https://staging-developer.world.org',
     }, fetchImpl);
 
-    await expect(verifier('rp_test', idKitResponse)).resolves.toEqual({ nullifier: 'nullifier' });
+    await expect(verifier('rp_test', idKitResponse, 'ledger-key-42')).resolves.toEqual({ nullifier: 'nullifier' });
     expect(fetchImpl).toHaveBeenCalledWith('https://staging-developer.world.org/api/v4/verify/rp_test', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
