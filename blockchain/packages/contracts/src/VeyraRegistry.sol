@@ -122,7 +122,6 @@ contract VeyraRegistry {
 
     address[] private _userAddresses;
     mapping(address => User) private _users;
-    mapping(address => uint256) private _userIndex;
 
     mapping(address => bytes32[]) private _secretIds;
     mapping(address => mapping(bytes32 => Secret)) private _secrets;
@@ -193,7 +192,6 @@ contract VeyraRegistry {
             exists: true
         });
 
-        _userIndex[msg.sender] = _userAddresses.length;
         _userAddresses.push(msg.sender);
 
         emit UserRegistered(msg.sender, leafIndex, keccak256(encryptedUserId), uint64(block.timestamp));

@@ -355,4 +355,141 @@ contract CapabilityRegistryTest is Test {
         vm.expectRevert(CapabilityRegistry.NotOwner.selector);
         reg.revokeAgent(agent, 1);
     }
+
+    // ------------------------------------------------- previously untested --
+
+    event PrincipalEnrolled(
+        bytes32 indexed nullifierHash, address indexed principal, uint8 verificationLevel, uint64 enrolledAt
+    );
+    event AgentRegistered(
+        address indexed agent,
+        bytes32 indexed principalNullifier,
+        bytes32 agentPubKeyHash,
+        uint64 registeredAt
+    );
+    event ConfirmationRecorded(
+        bytes32 indexed decisionId,
+        address indexed confirmer,
+        uint8 mode,
+        bytes32 typedDataHash,
+        uint64 confirmedAt
+    );
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    function test_EnrollPrincipal_EmitsNullifierNeverPii() public {
+        vm.expectEmit(true, true, false, true);
+        emit PrincipalEnrolled(bytes32("nullifier"), agent, 1, 1_757_000_000);
+
+        vm.prank(emitter);
+        reg.enrollPrincipal(bytes32("nullifier"), agent, 1, 1_757_000_000);
+    }
+
+    function test_EnrollPrincipal_RevertsForNonEmitter() public {
+        vm.prank(stranger);
+        vm.expectRevert(CapabilityRegistry.NotEmitter.selector);
+        reg.enrollPrincipal(bytes32("n"), agent, 1, 0);
+    }
+
+    function test_EnrollPrincipal_RevertsOnZeroNullifier() public {
+        vm.prank(emitter);
+        vm.expectRevert(CapabilityRegistry.ZeroId.selector);
+        reg.enrollPrincipal(bytes32(0), agent, 1, 0);
+    }
+
+    function test_RegisterAgent_BindsAgentToPrincipal() public {
+        vm.expectEmit(true, true, false, true);
+        emit AgentRegistered(agent, bytes32("nullifier"), keccak256("pubkey"), 1_757_000_000);
+
+        vm.prank(emitter);
+        reg.registerAgent(agent, bytes32("nullifier"), keccak256("pubkey"), 1_757_000_000);
+    }
+
+    function test_RegisterAgent_RevertsForNonEmitter() public {
+        vm.prank(stranger);
+        vm.expectRevert(CapabilityRegistry.NotEmitter.selector);
+        reg.registerAgent(agent, bytes32("n"), keccak256("k"), 0);
+    }
+
+    function test_RegisterAgent_RevertsOnZeroPubKeyHash() public {
+        vm.prank(emitter);
+        vm.expectRevert(CapabilityRegistry.ZeroId.selector);
+        reg.registerAgent(agent, bytes32("n"), bytes32(0), 0);
+    }
+
+    /// @dev typedDataHash is what binds a Ledger approval to those exact parameters.
+    function test_RecordConfirmation_CarriesTypedDataHash() public {
+        vm.expectEmit(true, true, false, true);
+        emit ConfirmationRecorded(
+            bytes32("d1"),
+            agent,
+            uint8(CapabilityRegistry.ConfirmationMode.LedgerEip712),
+            keccak256("eip712"),
+            1_757_000_020
+        );
+
+        vm.prank(emitter);
+        reg.recordConfirmation(
+            bytes32("d1"),
+            agent,
+            uint8(CapabilityRegistry.ConfirmationMode.LedgerEip712),
+            keccak256("eip712"),
+            1_757_000_020
+        );
+    }
+
+    function test_RecordConfirmation_RevertsOnInvalidMode() public {
+        vm.prank(emitter);
+        vm.expectRevert(abi.encodeWithSelector(CapabilityRegistry.InvalidConfirmationMode.selector, uint8(9)));
+        reg.recordConfirmation(bytes32("d1"), agent, 9, bytes32(0), 0);
+    }
+
+    function test_RecordConfirmation_RevertsForNonEmitter() public {
+        vm.prank(stranger);
+        vm.expectRevert(CapabilityRegistry.NotEmitter.selector);
+        reg.recordConfirmation(bytes32("d1"), agent, 0, bytes32(0), 0);
+    }
+
+    function test_TransferOwnership_MovesKillSwitch() public {
+        address newOwner = address(0xDEAD01);
+
+        vm.expectEmit(true, true, false, true);
+        emit OwnershipTransferred(owner, newOwner);
+        vm.prank(owner);
+        reg.transferOwnership(newOwner);
+
+        assertEq(reg.owner(), newOwner);
+
+        // old owner loses the kill switch, new owner gains it
+        vm.prank(owner);
+        vm.expectRevert(CapabilityRegistry.NotOwner.selector);
+        reg.revokeAgent(agent, 1);
+
+        vm.prank(newOwner);
+        reg.revokeAgent(agent, 1);
+        assertTrue(reg.isRevoked(agent));
+    }
+
+    function test_TransferOwnership_RevertsForNonOwner() public {
+        vm.prank(stranger);
+        vm.expectRevert(CapabilityRegistry.NotOwner.selector);
+        reg.transferOwnership(stranger);
+    }
+
+    function test_TransferOwnership_RevertsOnZero() public {
+        vm.prank(owner);
+        vm.expectRevert(CapabilityRegistry.ZeroAddress.selector);
+        reg.transferOwnership(address(0));
+    }
+
+    function test_RecordUses_RevertsForNonEmitter() public {
+        vm.prank(stranger);
+        vm.expectRevert(CapabilityRegistry.NotEmitter.selector);
+        reg.recordUses(new CapabilityRegistry.UseRecord[](1));
+    }
+
+    function test_RecordUses_RevertsOnEmptyBatch() public {
+        vm.prank(emitter);
+        vm.expectRevert(CapabilityRegistry.EmptyBatch.selector);
+        reg.recordUses(new CapabilityRegistry.UseRecord[](0));
+    }
 }
