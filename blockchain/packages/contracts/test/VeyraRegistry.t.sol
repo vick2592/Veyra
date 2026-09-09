@@ -44,8 +44,9 @@ contract VeyraRegistryTest is Test {
     uint256 internal constant EXTERNAL_NULLIFIER_HASH = 123;
     uint256 internal constant ROOT = 456;
     uint256 internal constant NULLIFIER_HASH = 789;
+    bytes32 internal constant REQUEST_ID = bytes32(uint256(1));
 
-    event AgentAuthorized(address indexed user, address agent, string secretIdentifier);
+    event AgentAuthorized(address indexed user, address agent, string secretIdentifier, bytes32 requestId);
 
     function setUp() public {
         worldId = new WorldIdMock();
@@ -63,10 +64,10 @@ contract VeyraRegistryTest is Test {
         uint256[8] memory proof;
 
         vm.expectEmit(true, true, true, true);
-        emit AgentAuthorized(user, agent, "ledger-key-1");
+        emit AgentAuthorized(user, agent, "ledger-key-1", REQUEST_ID);
 
         vm.prank(user);
-        registry.authorizeAgent(agent, "ledger-key-1", ROOT, NULLIFIER_HASH, proof);
+        registry.authorizeAgent(agent, "ledger-key-1", REQUEST_ID, ROOT, NULLIFIER_HASH, proof);
 
         assertTrue(registry.nullifierHashUsed(NULLIFIER_HASH));
         assertEq(worldId.lastRoot(), ROOT);
@@ -82,7 +83,7 @@ contract VeyraRegistryTest is Test {
 
         vm.prank(user);
         vm.expectRevert(bytes("invalid proof"));
-        registry.authorizeAgent(agent, "ledger-key-1", ROOT, NULLIFIER_HASH, proof);
+        registry.authorizeAgent(agent, "ledger-key-1", REQUEST_ID, ROOT, NULLIFIER_HASH, proof);
 
         assertFalse(registry.nullifierHashUsed(NULLIFIER_HASH));
     }
@@ -91,10 +92,18 @@ contract VeyraRegistryTest is Test {
         uint256[8] memory proof;
 
         vm.startPrank(user);
-        registry.authorizeAgent(agent, "ledger-key-1", ROOT, NULLIFIER_HASH, proof);
+        registry.authorizeAgent(agent, "ledger-key-1", REQUEST_ID, ROOT, NULLIFIER_HASH, proof);
 
         vm.expectRevert(VeyraRegistry.NullifierAlreadyUsed.selector);
-        registry.authorizeAgent(agent, "ledger-key-2", ROOT, NULLIFIER_HASH, proof);
+        registry.authorizeAgent(agent, "ledger-key-2", REQUEST_ID, ROOT, NULLIFIER_HASH, proof);
         vm.stopPrank();
+    }
+
+    function test_AuthorizeAgent_RevertsForZeroRequestId() public {
+        uint256[8] memory proof;
+
+        vm.prank(user);
+        vm.expectRevert(VeyraRegistry.InvalidRequestId.selector);
+        registry.authorizeAgent(agent, "ledger-key-1", bytes32(0), ROOT, NULLIFIER_HASH, proof);
     }
 }

@@ -18,9 +18,15 @@ contract VeyraRegistry {
     error EmptySecretIdentifier();
     error InvalidAddress();
     error InvalidNullifier();
+    error InvalidRequestId();
     error NullifierAlreadyUsed();
 
-    event AgentAuthorized(address indexed user, address agent, string secretIdentifier);
+    event AgentAuthorized(
+        address indexed user,
+        address agent,
+        string secretIdentifier,
+        bytes32 requestId
+    );
 
     IWorldID public immutable worldId;
     uint256 public immutable groupId;
@@ -46,12 +52,14 @@ contract VeyraRegistry {
     function authorizeAgent(
         address agentAddress,
         string memory secretIdentifier,
+        bytes32 requestId,
         uint256 root,
         uint256 nullifierHash,
         uint256[8] calldata proof
     ) external {
         if (agentAddress == address(0)) revert InvalidAddress();
         if (bytes(secretIdentifier).length == 0) revert EmptySecretIdentifier();
+        if (requestId == bytes32(0)) revert InvalidRequestId();
         if (nullifierHash == 0) revert InvalidNullifier();
         if (nullifierHashUsed[nullifierHash]) revert NullifierAlreadyUsed();
 
@@ -66,6 +74,6 @@ contract VeyraRegistry {
         );
 
         nullifierHashUsed[nullifierHash] = true;
-        emit AgentAuthorized(msg.sender, agentAddress, secretIdentifier);
+        emit AgentAuthorized(msg.sender, agentAddress, secretIdentifier, requestId);
     }
 }
