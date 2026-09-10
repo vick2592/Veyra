@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useAccount, useConnect } from 'wagmi';
+import { keccak256, encodePacked, toBytes } from 'viem';
+import { useAccount, useConnect, useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
 import {
   IDKitRequestWidget,
   selfieCheckLegacy,
@@ -10,7 +11,7 @@ import {
 } from '@worldcoin/idkit';
 
 type SimulatorState = 'idle' | 'submitting' | 'accepted' | 'error';
-type AuthorizationState = 'idle' | 'preparing_rp' | 'idkit_open' | 'proof_ready' | 'error';
+type AuthorizationState = 'idle' | 'preparing_rp' | 'idkit_open' | 'proof_ready' | 'submitting_tx' | 'waiting_for_tx' | 'polling_execution' | 'success' | 'error';
 
 type PendingRequest = {
   requestId: string;
@@ -20,6 +21,8 @@ type PendingRequest = {
   createdAt: string;
   updatedAt: string;
   expiresAt: string;
+  result?: unknown;
+  error?: {code: string; message: string};
 };
 
 type OnChainProof = {
@@ -31,7 +34,23 @@ type OnChainProof = {
 const backendUrl = 'http://localhost:3001';
 const worldAppId = process.env.NEXT_PUBLIC_WORLD_ID_APP_ID ?? '';
 const worldRpId = process.env.NEXT_PUBLIC_WORLD_ID_RP_ID ?? '';
+const registryAddress = process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}` | undefined;
 const dummyAgentAddress = '0x0000000000000000000000000000000000000001';
+
+const registryAbi = [{
+  type: 'function',
+  name: 'authorizeAgent',
+  stateMutability: 'nonpayable',
+  inputs: [
+    {name: 'agentAddress', type: 'address'},
+    {name: 'secretId', type: 'bytes32'},
+    {name: 'root', type: 'uint256'},
+    {name: 'nullifierHash', type: 'uint256'},
+    {name: 'proof', type: 'uint256[8]'},
+    {name: 'requestId', type: 'bytes32'},
+  ],
+  outputs: [],
+}] as const;
 
 async function fetchPendingRequests(signal?: AbortSignal): Promise<PendingRequest[]> {
   const response = await fetch(`${backendUrl}/api/bazantic/pending`, {signal});
@@ -77,6 +96,22 @@ function getOnChainProof(result: IDKitResult): OnChainProof {
   return {root, nullifierHash, proof};
 }
 
+function getSecretId(secretIdentifier: string): `0x${string}` {
+  return keccak256(toBytes(secretIdentifier));
+}
+
+function getWorldIdSignal(
+  userAddress: `0x${string}`,
+  agentAddress: `0x${string}`,
+  secretId: `0x${string}`,
+): string {
+  const digest = keccak256(encodePacked(
+    ['address', 'address', 'bytes32'],
+    [userAddress, agentAddress, secretId],
+  ));
+  return (BigInt(digest) >> BigInt(8)).toString();
+}
+
 export default function SandboxPage() {
   const [simulatorState, setSimulatorState] = useState<SimulatorState>('idle');
   const [message, setMessage] = useState('');
@@ -87,9 +122,23 @@ export default function SandboxPage() {
   const [rpContext, setRpContext] = useState<RpContext | null>(null);
   const [widgetOpen, setWidgetOpen] = useState(false);
   const [worldIdProof, setWorldIdProof] = useState<OnChainProof | null>(null);
+  const [authorizationTxHash, setAuthorizationTxHash] = useState<`0x${string}` | null>(null);
+  const [executionStatus, setExecutionStatus] = useState<PendingRequest['status'] | null>(null);
+  const [executionResult, setExecutionResult] = useState<unknown>(null);
+  const [executionError, setExecutionError] = useState<{code?: string; message: string} | null>(null);
   const proofCandidate = useRef<OnChainProof | null>(null);
   const {address, isConnected} = useAccount();
   const {connect, connectors} = useConnect();
+  const {writeContractAsync} = useWriteContract();
+  const {
+    isLoading: isTransactionPending,
+    isSuccess: isTransactionConfirmed,
+    isError: isTransactionError,
+    error: transactionError,
+  } = useWaitForTransactionReceipt({
+    hash: authorizationTxHash ?? undefined,
+    confirmations: 1,
+  });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -127,6 +176,79 @@ export default function SandboxPage() {
       window.clearInterval(interval);
     };
   }, []);
+
+  useEffect(() => {
+    if (authorizationTxHash === null || !isTransactionConfirmed || selectedRequestId === null) {
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+    setAuthorizationState('polling_execution');
+    setExecutionStatus('executing');
+    setMessage('Authorization confirmed. Waiting for the chain listener to execute the capability...');
+
+    async function pollExecutionStatus() {
+      try {
+        const response = await fetch(`${backendUrl}/api/bazantic/requests/${selectedRequestId}`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error('The request was not found. It may have expired.');
+          }
+          throw new Error(`Execution status failed with HTTP ${response.status}.`);
+        }
+        const request = await response.json() as PendingRequest;
+        if (!active) {
+          return;
+        }
+        setExecutionStatus(request.status);
+        setPendingRequests((current) => {
+          const withoutRequest = current.filter((item) => item.requestId !== request.requestId);
+          return request.status === 'pending_human_auth' ? [...withoutRequest, request] : withoutRequest;
+        });
+        if (request.status === 'completed') {
+          setExecutionResult(request.result);
+          setExecutionError(null);
+          setAuthorizationState('success');
+          setMessage('Capability completed. The final provider result is ready.');
+        } else if (request.status === 'failed') {
+          setExecutionResult(null);
+          setExecutionError(request.error ?? {message: 'The capability execution failed.'});
+          setAuthorizationState('error');
+          setMessage(request.error?.message ?? 'The capability execution failed.');
+        } else {
+          setMessage('Authorization confirmed. The chain listener is executing the capability...');
+        }
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === 'AbortError') && active) {
+          setExecutionError({message: error instanceof Error ? error.message : 'Execution status could not be loaded.'});
+          setAuthorizationState('error');
+          setMessage(error instanceof Error ? error.message : 'Execution status could not be loaded.');
+        }
+      }
+    }
+
+    void pollExecutionStatus();
+    const interval = window.setInterval(() => {
+      void pollExecutionStatus();
+    }, 3_000);
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearInterval(interval);
+    };
+  }, [authorizationTxHash, isTransactionConfirmed, selectedRequestId]);
+
+  useEffect(() => {
+    if (!isTransactionError || transactionError === null) {
+      return;
+    }
+    setAuthorizationState('error');
+    setExecutionError({message: transactionError.message});
+    setMessage(`Authorization transaction failed: ${transactionError.message}`);
+  }, [isTransactionError, transactionError]);
 
   async function handleSimulateAgentRequest() {
     setSimulatorState('submitting');
@@ -168,8 +290,61 @@ export default function SandboxPage() {
     }
   }
 
+  async function handleAuthorizeOnChain() {
+    if (
+      selectedRequest === undefined ||
+      selectedRequestId === null ||
+      selectedSecretIdentifier === null ||
+      worldIdProof === null ||
+      address === undefined ||
+      registryAddress === undefined
+    ) {
+      setAuthorizationState('error');
+      setMessage('Select a request, complete Face Auth, connect a wallet, and configure the registry first.');
+      return;
+    }
+
+    setAuthorizationState('submitting_tx');
+    setExecutionStatus(null);
+    setExecutionResult(null);
+    setExecutionError(null);
+    setMessage('Submitting on-chain authorization...');
+    try {
+      const transactionHash = await writeContractAsync({
+        address: registryAddress,
+        abi: registryAbi,
+        functionName: 'authorizeAgent',
+        args: [
+          selectedRequest.agentAddress as `0x${string}`,
+          getSecretId(selectedSecretIdentifier),
+          BigInt(worldIdProof.root),
+          BigInt(worldIdProof.nullifierHash),
+          worldIdProof.proof.map((value) => BigInt(value)) as unknown as readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint],
+          selectedRequestId as `0x${string}`,
+        ],
+      });
+      setAuthorizationTxHash(transactionHash);
+      setAuthorizationState('waiting_for_tx');
+      setMessage(`Authorization submitted: ${transactionHash.slice(0, 14)}... Waiting for confirmation.`);
+    } catch (error) {
+      setAuthorizationState('error');
+      setExecutionError({message: error instanceof Error ? error.message : 'Authorization transaction failed.'});
+      setMessage(error instanceof Error ? error.message : 'Authorization transaction failed.');
+    }
+  }
+
   const isSubmitting = simulatorState === 'submitting';
   const selectedRequest = pendingRequests.find((request) => request.requestId === selectedRequestId);
+  const selectedSecretId = selectedSecretIdentifier === null ? null : getSecretId(selectedSecretIdentifier);
+  const canAuthorize = selectedRequest !== undefined &&
+    selectedRequestId !== null &&
+    selectedSecretIdentifier !== null &&
+    selectedSecretId !== null &&
+    worldIdProof !== null &&
+    isConnected &&
+    address !== undefined &&
+    registryAddress !== undefined &&
+    authorizationState === 'proof_ready';
 
   return (
     <main className="min-h-screen px-5 py-6 sm:px-10 sm:py-10">
@@ -257,6 +432,10 @@ export default function SandboxPage() {
                     setRpContext(null);
                     setWidgetOpen(false);
                     setWorldIdProof(null);
+                    setAuthorizationTxHash(null);
+                    setExecutionStatus(null);
+                    setExecutionResult(null);
+                    setExecutionError(null);
                     proofCandidate.current = null;
                     setMessage(`Selected ${request.secretIdentifier} for authorization.`);
                   }}
@@ -292,7 +471,7 @@ export default function SandboxPage() {
               </p>
               <p className="mt-2 max-w-xl text-sm leading-6 text-(--muted)">
                 {worldIdProof !== null
-                  ? 'Proof captured. On-chain authorization will be available in the next stage.'
+                  ? 'Proof captured. Submit the selected request for on-chain authorization.'
                   : 'The selected request determines the signed World ID action.'}
               </p>
             </div>
@@ -372,6 +551,14 @@ export default function SandboxPage() {
               {isConnected && address !== undefined && (
                 <span className="text-xs text-(--muted)">{address.slice(0, 6)}...{address.slice(-4)}</span>
               )}
+              <button
+                type="button"
+                onClick={() => void handleAuthorizeOnChain()}
+                disabled={!canAuthorize || isTransactionPending}
+                className="min-w-56 rounded-full border border-(--ink) px-6 py-4 text-sm font-semibold text-(--ink) transition hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                {authorizationState === 'submitting_tx' ? 'Submitting...' : authorizationState === 'waiting_for_tx' ? 'Confirming...' : 'Authorize Agent'}
+              </button>
             </div>
           </div>
 
@@ -384,7 +571,13 @@ export default function SandboxPage() {
               rp_context={rpContext}
               environment="staging"
               allow_legacy_proofs={true}
-              preset={selfieCheckLegacy({signal: address})}
+              preset={selfieCheckLegacy({
+                signal: getWorldIdSignal(
+                  address,
+                  selectedRequest.agentAddress as `0x${string}`,
+                  getSecretId(selectedRequest.secretIdentifier),
+                ),
+              })}
               handleVerify={async (result: IDKitResult) => {
                 proofCandidate.current = getOnChainProof(result);
                 setMessage('Proof received. Completing World ID verification...');
@@ -412,6 +605,39 @@ export default function SandboxPage() {
               autoClose
             />
           )}
+        </section>
+
+        <section className="mt-6 border-t border-(--line) pt-6" aria-live="polite">
+          <div className="grid gap-6 lg:grid-cols-[0.7fr_1.3fr]">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-(--muted)">Execution feedback</p>
+              <p className="mt-2 text-2xl">
+                {authorizationState === 'success' ? 'Capability complete.' : executionStatus === 'executing' ? 'Listener is executing.' : 'Awaiting authorization.'}
+              </p>
+              {authorizationTxHash !== null && (
+                <p className="mt-3 break-all text-xs leading-5 text-(--muted)">
+                  Transaction: {authorizationTxHash}
+                </p>
+              )}
+              {executionError !== null && (
+                <p className="mt-3 text-sm text-[#a83f31]">
+                  {executionError.code !== undefined ? `${executionError.code}: ` : ''}{executionError.message}
+                </p>
+              )}
+            </div>
+
+            <div className="min-h-32 rounded-2xl border border-(--line) bg-white/55 p-4">
+              {executionResult !== null ? (
+                <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words text-sm leading-6 text-(--ink)">
+                  {JSON.stringify(executionResult, null, 2)}
+                </pre>
+              ) : (
+                <p className="text-sm leading-6 text-(--muted)">
+                  The backend result will appear here after the confirmed authorization event reaches the chain listener.
+                </p>
+              )}
+            </div>
+          </div>
         </section>
       </div>
     </main>
