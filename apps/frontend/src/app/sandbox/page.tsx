@@ -114,6 +114,7 @@ function getWorldIdSignal(
 
 export default function SandboxPage() {
   const [simulatorState, setSimulatorState] = useState<SimulatorState>('idle');
+  const [isMounted, setIsMounted] = useState(false);
   const [message, setMessage] = useState('');
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
@@ -139,6 +140,10 @@ export default function SandboxPage() {
     hash: authorizationTxHash ?? undefined,
     confirmations: 1,
   });
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -336,7 +341,7 @@ export default function SandboxPage() {
   const isSubmitting = simulatorState === 'submitting';
   const selectedRequest = pendingRequests.find((request) => request.requestId === selectedRequestId);
   const selectedSecretId = selectedSecretIdentifier === null ? null : getSecretId(selectedSecretIdentifier);
-  const canAuthorize = selectedRequest !== undefined &&
+  const canAuthorize = isMounted && selectedRequest !== undefined &&
     selectedRequestId !== null &&
     selectedSecretIdentifier !== null &&
     selectedSecretId !== null &&
@@ -448,7 +453,7 @@ export default function SandboxPage() {
                     </span>
                   </span>
                   <span className="text-xs uppercase tracking-[0.14em] text-(--muted)">
-                    {request.status.replaceAll('_', ' ')} · expires {new Date(request.expiresAt).toLocaleTimeString()}
+                    {request.status.replaceAll('_', ' ')} · {isMounted ? `expires ${new Date(request.expiresAt).toLocaleTimeString()}` : 'checking expiry'}
                   </span>
                 </button>
               );
@@ -477,7 +482,9 @@ export default function SandboxPage() {
             </div>
 
             <div className="flex flex-col items-stretch gap-3 sm:items-end">
-              {!isConnected ? (
+              {!isMounted ? (
+                <div className="h-13 min-w-56 animate-pulse rounded-full border border-(--line) bg-white/55" aria-label="Loading wallet controls" />
+              ) : !isConnected ? (
                 <button
                   type="button"
                   onClick={() => connectors[0] !== undefined && connect({connector: connectors[0]})}
@@ -548,17 +555,19 @@ export default function SandboxPage() {
                   {authorizationState === 'preparing_rp' ? 'Preparing Face Auth...' : 'Start Face Auth'}
                 </button>
               )}
-              {isConnected && address !== undefined && (
+              {isMounted && isConnected && address !== undefined && (
                 <span className="text-xs text-(--muted)">{address.slice(0, 6)}...{address.slice(-4)}</span>
               )}
-              <button
-                type="button"
-                onClick={() => void handleAuthorizeOnChain()}
-                disabled={!canAuthorize || isTransactionPending}
-                className="min-w-56 rounded-full border border-(--ink) px-6 py-4 text-sm font-semibold text-(--ink) transition hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                {authorizationState === 'submitting_tx' ? 'Submitting...' : authorizationState === 'waiting_for_tx' ? 'Confirming...' : 'Authorize Agent'}
-              </button>
+              {isMounted && (
+                <button
+                  type="button"
+                  onClick={() => void handleAuthorizeOnChain()}
+                  disabled={!canAuthorize || isTransactionPending}
+                  className="min-w-56 rounded-full border border-(--ink) px-6 py-4 text-sm font-semibold text-(--ink) transition hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  {authorizationState === 'submitting_tx' ? 'Submitting...' : authorizationState === 'waiting_for_tx' ? 'Confirming...' : 'Authorize Agent'}
+                </button>
+              )}
             </div>
           </div>
 
@@ -583,12 +592,18 @@ export default function SandboxPage() {
                 setMessage('Proof received. Completing World ID verification...');
               }}
               onSuccess={() => {
-                if (proofCandidate.current === null) {
+                const proof = proofCandidate.current;
+                if (proof === null) {
                   setAuthorizationState('error');
                   setMessage('World ID completed without an on-chain proof.');
                   return;
                 }
-                setWorldIdProof(proofCandidate.current);
+                console.log("Captured World ID Proof:", proof);
+                setWorldIdProof({
+                  root: proof.root,
+                  nullifierHash: proof.nullifierHash,
+                  proof: proof.proof,
+                });
                 setAuthorizationState('proof_ready');
                 setRpContext(null);
                 setWidgetOpen(false);
@@ -628,7 +643,7 @@ export default function SandboxPage() {
 
             <div className="min-h-32 rounded-2xl border border-(--line) bg-white/55 p-4">
               {executionResult !== null ? (
-                <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words text-sm leading-6 text-(--ink)">
+                <pre className="max-h-80 overflow-auto whitespace-pre-wrap wrap-break-word text-sm leading-6 text-(--ink)">
                   {JSON.stringify(executionResult, null, 2)}
                 </pre>
               ) : (
