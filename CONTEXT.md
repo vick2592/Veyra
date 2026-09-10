@@ -31,7 +31,7 @@ The backend queue is an in-memory Map and is an ephemeral relay only. Authorizat
 
 1. `blockchain/packages/contracts/src/VeyraRegistry.sol` stores encrypted user metadata and secret ciphertext; it does not store plaintext API keys.
 2. `registerUser` registers encrypted user metadata and `storeSecret` stores active ciphertext under a `bytes32 secretId`.
-3. `authorizeAgent(address,bytes32,uint256,uint256,uint256[8],bytes32)` verifies the World ID proof, checks the active secret and audit-registry revocation state, and records the nullifier.
+3. `authorizeAgent(address,bytes32,uint256,uint256,uint256[8],bytes32)` derives the bound signal, calls the configured World ID router `verifyProof` with group `1` and the deployment external nullifier, checks the active secret and audit-registry revocation state, and records the nullifier.
 4. The proof signal binds the human wallet, agent address, and secret ID. Successful authorization emits `AgentAuthorized` with the secret ID, nullifier, request ID, and timestamp.
 5. `apps/backend/src/services/chainListener.ts` watches the configured registry address with `viem`, waits for configured transaction confirmations, and claims the matching request ID from the in-memory queue.
 6. The listener reuses the shared provider execution function and existing `SecretKeyring` allowlist. Decrypted key material is held only for the provider request and is never logged or persisted.
@@ -76,7 +76,7 @@ The frontend lives in `apps/frontend/` and runs on port `3000` by default. The e
 
 - Framework: Next.js App Router with TypeScript and Tailwind CSS
 - World ID SDK: current `@worldcoin/idkit` 4.x
-- Widget: `IDKitRequestWidget` with a signed `rp_context`
+- Widget: hook-owned staging IDKit modal with a signed `rp_context`, QR rendering, and Simulator URI fallback
 - Credential preset: `selfieCheckLegacy()`
 - Action: the selected request's secret identifier in the sandbox authorization flow; the legacy HTTP flow uses `execute-agent`
 - Web3 stack: Wagmi, Viem, and React Query on local Anvil (`31337`)

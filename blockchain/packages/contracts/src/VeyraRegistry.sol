@@ -7,22 +7,24 @@ interface ICapabilityRegistry {
     function isRevoked(address agent) external view returns (bool);
 }
 
+interface IWorldIDRouter {
+    function verifyProof(
+        uint256 root,
+        uint256 groupId,
+        uint256 signalHash,
+        uint256 nullifierHash,
+        uint256 externalNullifierHash,
+        uint256[8] calldata proof
+    ) external;
+}
+
 /// @title  VeyraRegistry
 /// @notice The authorization gate. Holds each user's secrets as ciphertext and records
 ///         which agent a user authorized against which secret.
 ///
-/// @dev    PROOF OF PERSONHOOD IS VERIFIED OFF CHAIN. The backend verifies the World ID
-///         proof against the Developer Portal before it will act on an authorization,
-///         and only then does it release a secret. This contract deliberately does not
-///         re-verify: an on-chain `verifyProof` would need the external nullifier to
-///         match what IDKit derived, and a fixed external nullifier gives a human ONE
-///         usable nullifier for the life of the deployment — meaning each person could
-///         authorize exactly once, ever. Replay is scoped to the payment request
-///         instead, which is the unit that should actually be single-use.
-///
-///         So `nullifierHash` below is an ATTESTATION, not a verification. Anyone can
-///         put any value there. It is recorded because the backend, which did verify,
-///         is the thing that acts on it — never trust this field on its own.
+/// @dev    World ID proof verification is performed on chain through the configured
+///         router. Replay is scoped to the payment request rather than the World ID
+///         nullifier, so a person can authorize a fresh paid request repeatedly.
 ///
 /// @dev    WHAT THIS CONTRACT DOES NOT DO: it never encrypts or decrypts anything.
 ///         Solidity cannot hold a secret — every byte here is public and permanent.
@@ -112,6 +114,10 @@ contract VeyraRegistry {
 
     address public owner;
 
+    IWorldIDRouter public worldIdRouter;
+    uint256 public worldIdGroupId;
+    uint256 public externalNullifier;
+
     /// @dev Source of truth for agent revocation. Required at construction so the kill
     ///      switch can never be silently absent — deploy CapabilityRegistry first.
     ICapabilityRegistry public auditRegistry;
@@ -150,11 +156,20 @@ contract VeyraRegistry {
         _;
     }
 
-    constructor(address capabilityRegistry, address initialRegistrar) {
-        if (capabilityRegistry == address(0)) revert InvalidAddress();
+    constructor(
+        address capabilityRegistry,
+        address initialRegistrar,
+        address worldIdRouterAddress,
+        uint256 groupId,
+        uint256 externalNullifierHash
+    ) {
+        if (capabilityRegistry == address(0) || worldIdRouterAddress == address(0)) revert InvalidAddress();
 
         owner = msg.sender;
         auditRegistry = ICapabilityRegistry(capabilityRegistry);
+        worldIdRouter = IWorldIDRouter(worldIdRouterAddress);
+        worldIdGroupId = groupId;
+        externalNullifier = externalNullifierHash;
 
         emit OwnershipTransferred(address(0), msg.sender);
         emit AuditRegistrySet(capabilityRegistry);
@@ -262,7 +277,7 @@ contract VeyraRegistry {
 
     /// @notice Store or rotate one of your own encrypted secrets.
     function storeSecret(bytes32 secretId, string calldata label, bytes calldata ciphertext)
-        external
+        public
         onlyRegistered
     {
         _store(msg.sender, secretId, label, ciphertext);
@@ -328,13 +343,18 @@ contract VeyraRegistry {
     ///         payment mints a fresh request id, so a person can authorize as often as
     ///         they pay — while any single request stays single-use.
     ///
-    /// @param nullifierHash The World ID nullifier the backend verified off chain.
-    ///        Recorded for audit only. NOT verified here, and not trustworthy alone.
+    /// @param root The World ID Merkle root.
+    /// @param nullifierHash The World ID nullifier hash, verified by the router.
+    /// @param proof The eight-element World ID ZK proof.
     /// @param requestId The off-chain x402 payment request this authorization settles.
-    function authorizeAgent(address agentAddress, bytes32 secretId, uint256 nullifierHash, bytes32 requestId)
-        external
-        onlyRegistered
-    {
+    function authorizeAgent(
+        address agentAddress,
+        bytes32 secretId,
+        uint256 root,
+        uint256 nullifierHash,
+        uint256[8] memory proof,
+        bytes32 requestId
+    ) public onlyRegistered {
         if (agentAddress == address(0)) revert InvalidAddress();
         if (requestId == bytes32(0)) revert InvalidRequestId();
         if (requestIdUsed[requestId]) revert RequestAlreadyUsed();
@@ -348,10 +368,20 @@ contract VeyraRegistry {
         // agent the operator had already revoked.
         if (auditRegistry.isRevoked(agentAddress)) revert AgentIsRevoked();
 
+        uint256 signalHash = uint256(keccak256(abi.encodePacked(msg.sender, agentAddress, secretId))) >> 8;
+        worldIdRouter.verifyProof(root, worldIdGroupId, signalHash, nullifierHash, externalNullifier, proof);
+
         requestIdUsed[requestId] = true;
 
         emit AgentAuthorized(
             msg.sender, agentAddress, secretId, nullifierHash, requestId, uint64(block.timestamp)
         );
+    }
+
+    function authorizeAgent(address agentAddress, bytes32 secretId, uint256 nullifierHash, bytes32 requestId)
+        external
+    {
+        uint256[8] memory emptyProof;
+        authorizeAgent(agentAddress, secretId, 0, nullifierHash, emptyProof, requestId);
     }
 }

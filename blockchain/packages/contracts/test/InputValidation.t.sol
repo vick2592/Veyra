@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {CapabilityRegistry} from "../src/CapabilityRegistry.sol";
+import {MockWorldIDRouter} from "./MockWorldIDRouter.sol";
 import {VeyraRegistry} from "../src/VeyraRegistry.sol";
 
 /// @notice Every guard on every entry point. These are the branches a happy-path suite
@@ -10,6 +11,7 @@ import {VeyraRegistry} from "../src/VeyraRegistry.sol";
 ///         append-only log.
 contract InputValidationTest is Test {
     CapabilityRegistry internal audit;
+    MockWorldIDRouter internal worldIdRouter;
     VeyraRegistry internal registry;
 
     address internal owner = address(0xC0FFEE);
@@ -23,7 +25,8 @@ contract InputValidationTest is Test {
     function setUp() public {
         vm.startPrank(owner);
         audit = new CapabilityRegistry();
-        registry = new VeyraRegistry(address(audit), registrar);
+        worldIdRouter = new MockWorldIDRouter();
+        registry = new VeyraRegistry(address(audit), registrar, address(worldIdRouter), 1, 2);
         vm.stopPrank();
 
         vm.startPrank(user);

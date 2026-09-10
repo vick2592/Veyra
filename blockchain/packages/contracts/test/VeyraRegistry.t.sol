@@ -4,9 +4,11 @@ pragma solidity 0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {VeyraRegistry} from "../src/VeyraRegistry.sol";
 import {CapabilityRegistry} from "../src/CapabilityRegistry.sol";
+import {MockWorldIDRouter} from "./MockWorldIDRouter.sol";
 
 contract VeyraRegistryTest is Test {
     CapabilityRegistry internal audit;
+    MockWorldIDRouter internal worldIdRouter;
     VeyraRegistry internal registry;
 
     address internal owner = address(0xC0FFEE);
@@ -39,7 +41,8 @@ contract VeyraRegistryTest is Test {
     function setUp() public {
         vm.startPrank(owner);
         audit = new CapabilityRegistry();
-        registry = new VeyraRegistry(address(audit), registrar);
+        worldIdRouter = new MockWorldIDRouter();
+        registry = new VeyraRegistry(address(audit), registrar, address(worldIdRouter), 1, 2);
         vm.stopPrank();
     }
 
@@ -62,17 +65,20 @@ contract VeyraRegistryTest is Test {
 
     function test_Constructor_RevertsOnZeroCapabilityRegistry() public {
         vm.expectRevert(VeyraRegistry.InvalidAddress.selector);
-        new VeyraRegistry(address(0), registrar);
+        new VeyraRegistry(address(0), registrar, address(worldIdRouter), 1, 2);
     }
 
     function test_Constructor_SetsOwnerAndRegistrar() public view {
         assertEq(registry.owner(), owner);
         assertTrue(registry.isRegistrar(registrar));
+        assertEq(address(registry.worldIdRouter()), address(worldIdRouter));
+        assertEq(registry.worldIdGroupId(), 1);
+        assertEq(registry.externalNullifier(), 2);
     }
 
     function test_Constructor_AcceptsZeroRegistrar() public {
         vm.prank(owner);
-        VeyraRegistry r = new VeyraRegistry(address(audit), address(0));
+        VeyraRegistry r = new VeyraRegistry(address(audit), address(0), address(worldIdRouter), 1, 2);
         assertFalse(r.isRegistrar(address(0)));
     }
 
@@ -271,6 +277,33 @@ contract VeyraRegistryTest is Test {
 
         _authorize(user, bytes32("req-1"));
         assertTrue(registry.requestIdUsed(bytes32("req-1")));
+    }
+
+    function test_AuthorizeAgent_VerifiesWorldIdProofBeforeMarkingRequestUsed() public {
+        _register(user);
+        _store(user);
+
+        _authorize(user, bytes32("req-verify"));
+
+        assertEq(worldIdRouter.lastGroupId(), 1);
+        assertEq(worldIdRouter.lastExternalNullifierHash(), 2);
+        assertEq(
+            worldIdRouter.lastSignalHash(), uint256(keccak256(abi.encodePacked(user, agent, SECRET_ID))) >> 8
+        );
+        assertTrue(registry.requestIdUsed(bytes32("req-verify")));
+    }
+
+    function test_AuthorizeAgent_InvalidWorldIdProofDoesNotUseRequest() public {
+        _register(user);
+        _store(user);
+        worldIdRouter.setShouldRevert(true);
+        uint256[8] memory emptyProof;
+
+        vm.prank(user);
+        vm.expectRevert(bytes("invalid proof"));
+        registry.authorizeAgent(agent, SECRET_ID, 1, NULLIFIER, emptyProof, bytes32("req-invalid"));
+
+        assertFalse(registry.requestIdUsed(bytes32("req-invalid")));
     }
 
     /// @dev The whole point of moving replay protection off the nullifier: a person can

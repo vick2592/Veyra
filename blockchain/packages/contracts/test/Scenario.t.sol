@@ -3,12 +3,14 @@ pragma solidity 0.8.28;
 
 import {Test, console2} from "forge-std/Test.sol";
 import {CapabilityRegistry} from "../src/CapabilityRegistry.sol";
+import {MockWorldIDRouter} from "./MockWorldIDRouter.sol";
 import {VeyraRegistry} from "../src/VeyraRegistry.sol";
 
 /// @notice Walks the demo end to end and prints observed state, so behaviour can be
 ///         compared against the design rather than assumed from it.
 contract ScenarioTest is Test {
     CapabilityRegistry internal audit;
+    MockWorldIDRouter internal worldIdRouter;
     VeyraRegistry internal gate;
 
     address internal owner = address(0xC0FFEE);
@@ -23,7 +25,8 @@ contract ScenarioTest is Test {
     function setUp() public {
         vm.startPrank(owner);
         audit = new CapabilityRegistry();
-        gate = new VeyraRegistry(address(audit), registrar);
+        worldIdRouter = new MockWorldIDRouter();
+        gate = new VeyraRegistry(address(audit), registrar, address(worldIdRouter), 1, 2);
         vm.stopPrank();
     }
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import QRCode from 'qrcode';
 import { decodeAbiParameters, keccak256, encodePacked, toBytes } from 'viem';
 import { useAccount, useConnect, useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
 import {
@@ -149,6 +150,8 @@ export default function SandboxPage() {
   const [verificationMode, setVerificationMode] = useState<VerificationMode>('selfie');
   const [authorizationState, setAuthorizationState] = useState<AuthorizationState>('idle');
   const [rpContext, setRpContext] = useState<RpContext | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [simulatorCopyState, setSimulatorCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
   const [worldIdProof, setWorldIdProof] = useState<OnChainProof | null>(null);
   const [authorizationTxHash, setAuthorizationTxHash] = useState<`0x${string}` | null>(null);
   const [executionStatus, setExecutionStatus] = useState<PendingRequest['status'] | null>(null);
@@ -423,6 +426,48 @@ export default function SandboxPage() {
         }),
   });
   const simulatorUrl = connectorURI === null ? null : getSimulatorUrl(connectorURI);
+
+  useEffect(() => {
+    if (connectorURI === null) {
+      setQrDataUrl(null);
+      return;
+    }
+
+    let active = true;
+    void QRCode.toDataURL(connectorURI, {margin: 2, width: 280})
+      .then((dataUrl) => {
+        if (active) {
+          setQrDataUrl(dataUrl);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setQrDataUrl(null);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [connectorURI]);
+
+  useEffect(() => {
+    if (connectorURI === null) {
+      setSimulatorCopyState('idle');
+    }
+  }, [connectorURI]);
+
+  async function handleCopySimulatorLink() {
+    if (simulatorUrl === null) {
+      return;
+    }
+    try {
+      await copyText(simulatorUrl);
+      setSimulatorCopyState('copied');
+    } catch {
+      setSimulatorCopyState('error');
+    }
+  }
 
   useEffect(() => {
     if (rpContext === null || selectedRequest === undefined || address === undefined || isIdKitOpen) {
@@ -741,19 +786,29 @@ export default function SandboxPage() {
             </div>
           </div>
 
-          {connectorURI !== null && rpContext !== null && (
-            <div className="mt-6 rounded-2xl border border-(--line) bg-white/55 p-4 text-sm" aria-live="polite">
-              <p className="font-semibold text-(--ink)">Simulator connection fallback</p>
-              <p className="mt-1 leading-6 text-(--muted)">
-                Copy the raw connection URI to the World ID Simulator or open the generated Simulator link on the testing device.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
+          {rpContext !== null && (isIdKitOpen || connectorURI !== null) && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(23,33,27,0.42)] p-5" role="dialog" aria-modal="true" aria-label="World ID verification">
+              <div className="w-full max-w-2xl rounded-3xl border border-(--line) bg-(--paper) p-4 text-sm shadow-[0_24px_80px_rgba(23,33,27,0.28)] sm:p-6" aria-live="polite">
+              <div className="grid gap-5 sm:grid-cols-[280px_1fr] sm:items-center">
+                <div className="flex min-h-70 items-center justify-center rounded-xl bg-white p-3">
+                  {qrDataUrl === null ? (
+                    <p className="text-center text-xs text-(--muted)">Preparing QR code...</p>
+                  ) : (
+                    <img src={qrDataUrl} alt="World ID connection QR code" className="h-64 w-64" />
+                  )}
+                </div>
+                <div>
+                  <p className="font-semibold text-(--ink)">World ID verification</p>
+                  <p className="mt-1 leading-6 text-(--muted)">
+                    Scan the QR code with the World ID Simulator, or copy the Simulator link to the testing device.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => void copyText(connectorURI).then(() => setMessage('World ID connection URI copied.')).catch(() => setMessage('The connection URI could not be copied.'))}
+                  onClick={() => void handleCopySimulatorLink()}
                   className="rounded-full border border-(--ink) px-4 py-2 text-xs font-semibold text-(--ink) transition hover:bg-white"
                 >
-                  Copy Simulator URI
+                  {simulatorCopyState === 'copied' ? 'Copied!' : simulatorCopyState === 'error' ? 'Copy failed' : 'Copy Simulator Link'}
                 </button>
                 {simulatorUrl !== null && (
                   <a
@@ -777,7 +832,13 @@ export default function SandboxPage() {
                 >
                   Cancel
                 </button>
+                  </div>
+                  {simulatorCopyState === 'error' && (
+                    <p className="mt-2 text-xs text-[#a83f31]">Clipboard access failed. Copy the Simulator link manually from the browser address bar.</p>
+                  )}
+                </div>
               </div>
+            </div>
             </div>
           )}
         </section>

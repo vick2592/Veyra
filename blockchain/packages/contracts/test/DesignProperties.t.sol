@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {CapabilityRegistry} from "../src/CapabilityRegistry.sol";
+import {MockWorldIDRouter} from "./MockWorldIDRouter.sol";
 import {VeyraRegistry} from "../src/VeyraRegistry.sol";
 
 /// @dev Pretends to be a CapabilityRegistry and tries to re-enter on the isRevoked call.
@@ -33,6 +34,7 @@ contract ReentrantAudit {
 /// @notice Properties the design claims, checked directly rather than via happy paths.
 contract DesignPropertiesTest is Test {
     CapabilityRegistry internal audit;
+    MockWorldIDRouter internal worldIdRouter;
     VeyraRegistry internal gate;
 
     address internal owner = address(0xC0FFEE);
@@ -45,7 +47,8 @@ contract DesignPropertiesTest is Test {
     function setUp() public {
         vm.startPrank(owner);
         audit = new CapabilityRegistry();
-        gate = new VeyraRegistry(address(audit), registrar);
+        worldIdRouter = new MockWorldIDRouter();
+        gate = new VeyraRegistry(address(audit), registrar, address(worldIdRouter), 1, 2);
         vm.stopPrank();
 
         vm.startPrank(user);
@@ -62,7 +65,7 @@ contract DesignPropertiesTest is Test {
         assertEq(notAContract.code.length, 0);
 
         vm.prank(owner);
-        VeyraRegistry r = new VeyraRegistry(notAContract, registrar);
+        VeyraRegistry r = new VeyraRegistry(notAContract, registrar, address(worldIdRouter), 1, 2);
 
         vm.startPrank(user);
         r.registerUser(hex"01", 0);
@@ -79,7 +82,7 @@ contract DesignPropertiesTest is Test {
         ReentrantAudit hostile = new ReentrantAudit();
 
         vm.prank(owner);
-        VeyraRegistry r = new VeyraRegistry(address(hostile), registrar);
+        VeyraRegistry r = new VeyraRegistry(address(hostile), registrar, address(worldIdRouter), 1, 2);
         hostile.arm(r, SECRET_ID);
 
         vm.startPrank(user);
