@@ -399,7 +399,7 @@ export default function SandboxPage() {
     isOpen: isIdKitOpen,
   } = useIDKitRequest({
     app_id: worldAppId as `app_${string}`,
-    action: selectedRequest?.secretIdentifier ?? 'sandbox',
+    action: 'execute-agent',
     rp_context: rpContext ?? {
       rp_id: worldRpId,
       nonce: '',
@@ -707,7 +707,7 @@ export default function SandboxPage() {
                       const response = await fetch(`${backendUrl}/api/world-id/sign`, {
                         method: 'POST',
                         headers: {'content-type': 'application/json'},
-                        body: JSON.stringify({action: selectedRequest.secretIdentifier}),
+                        body: JSON.stringify({action: 'execute-agent'}),
                       });
                       const body = await response.json().catch(() => null) as {
                         error?: string;

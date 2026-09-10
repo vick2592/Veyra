@@ -31,3 +31,4 @@ subgraph/build/
 keys/
 tmp/
 .DS_Store
+.claude
