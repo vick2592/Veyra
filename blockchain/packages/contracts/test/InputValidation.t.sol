@@ -3,14 +3,7 @@ pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {CapabilityRegistry} from "../src/CapabilityRegistry.sol";
-import {IWorldID, VeyraRegistry} from "../src/VeyraRegistry.sol";
-
-contract NoopWorldId is IWorldID {
-    function verifyProof(uint256, uint256, uint256, uint256, uint256, uint256[8] calldata)
-        external
-        override
-    {}
-}
+import {VeyraRegistry} from "../src/VeyraRegistry.sol";
 
 /// @notice Every guard on every entry point. These are the branches a happy-path suite
 ///         never reaches, and they are exactly the ones that keep bad input out of an
@@ -22,6 +15,7 @@ contract InputValidationTest is Test {
     address internal owner = address(0xC0FFEE);
     address internal emitter = address(0xE471);
     address internal stranger = address(0xBAD);
+    address internal registrar = address(0x5E4E4);
     address internal user = address(0xBEEF);
     address internal agent = address(0xA6E7);
 
@@ -30,7 +24,7 @@ contract InputValidationTest is Test {
     function setUp() public {
         vm.startPrank(owner);
         audit = new CapabilityRegistry(emitter);
-        registry = new VeyraRegistry(address(new NoopWorldId()), 1, 1, address(audit));
+        registry = new VeyraRegistry(address(audit), registrar);
         vm.stopPrank();
 
         vm.startPrank(user);
@@ -254,11 +248,9 @@ contract InputValidationTest is Test {
         // revocation in the OLD registry must no longer block anything
         audit.revokeAgent(agent, 1);
         vm.stopPrank();
-
-        uint256[8] memory proof;
         vm.prank(user);
-        registry.authorizeAgent(agent, SECRET_ID, 1, 42, proof, bytes32("r1"));
-        assertTrue(registry.nullifierHashUsed(42));
+        registry.authorizeAgent(agent, SECRET_ID, 42, bytes32("r1"));
+        assertTrue(registry.requestIdUsed(bytes32("r1")));
     }
 
     function test_RotateUserId_RevertsOnEmptyId() public {
@@ -334,5 +326,26 @@ contract InputValidationTest is Test {
 
     function test_SecretIdsOf_EmptyForUnknownUser() public view {
         assertEq(registry.secretIdsOf(stranger).length, 0);
+    }
+
+    function test_SetRegistrar_RevertsOnZeroAddress() public {
+        vm.prank(owner);
+        vm.expectRevert(VeyraRegistry.InvalidAddress.selector);
+        registry.setRegistrar(address(0), true);
+    }
+
+    function test_SetAuditRegistry_RevertsOnZeroAddress() public {
+        vm.prank(owner);
+        vm.expectRevert(VeyraRegistry.InvalidAddress.selector);
+        registry.setAuditRegistry(address(0));
+    }
+
+    function test_StoreSecretFor_RevertsOnEmptyCiphertext() public {
+        vm.prank(registrar);
+        registry.registerUserFor(stranger, hex"01", 3);
+
+        vm.prank(registrar);
+        vm.expectRevert(VeyraRegistry.EmptyCiphertext.selector);
+        registry.storeSecretFor(stranger, SECRET_ID, "label", "");
     }
 }

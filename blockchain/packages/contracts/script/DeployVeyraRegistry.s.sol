@@ -10,19 +10,20 @@ import {VeyraRegistry} from "../src/VeyraRegistry.sol";
 ///         switch impossible to leave unwired.
 ///
 /// Env:
-///   DEPLOYER_PRIVATE_KEY              required
-///   WORLD_ID_ADDRESS                  required — World ID router for the target chain
-///   WORLD_ID_GROUP_ID                 required
-///   WORLD_ID_EXTERNAL_NULLIFIER_HASH  required
-///   EMITTER_ADDRESS                   optional — hot key allowed to append audit records
-///   CAPABILITY_REGISTRY_ADDRESS       optional — reuse an existing audit registry
+///   DEPLOYER_PRIVATE_KEY         required
+///   REGISTRAR_ADDRESS            optional — backend key allowed to register users and
+///                                store secrets on their behalf. Defaults to deployer.
+///   EMITTER_ADDRESS              optional — hot key allowed to append audit records.
+///   CAPABILITY_REGISTRY_ADDRESS  optional — reuse an existing audit registry.
+///
+/// World ID is verified off chain by the backend against the Developer Portal, so no
+/// router address or external nullifier is needed here.
 contract DeployVeyraRegistry is Script {
     function run() external returns (CapabilityRegistry capabilityRegistry, VeyraRegistry registry) {
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        address worldIdAddress = vm.envAddress("WORLD_ID_ADDRESS");
-        uint256 worldIdGroupId = vm.envUint("WORLD_ID_GROUP_ID");
-        uint256 worldIdExternalNullifierHash = vm.envUint("WORLD_ID_EXTERNAL_NULLIFIER_HASH");
-        address emitter = vm.envOr("EMITTER_ADDRESS", vm.addr(deployerPrivateKey));
+        address deployer = vm.addr(deployerPrivateKey);
+        address registrar = vm.envOr("REGISTRAR_ADDRESS", deployer);
+        address emitter = vm.envOr("EMITTER_ADDRESS", deployer);
         address existingAudit = vm.envOr("CAPABILITY_REGISTRY_ADDRESS", address(0));
 
         vm.startBroadcast(deployerPrivateKey);
@@ -33,17 +34,14 @@ contract DeployVeyraRegistry is Script {
             capabilityRegistry = CapabilityRegistry(existingAudit);
         }
 
-        registry = new VeyraRegistry(
-            worldIdAddress, worldIdGroupId, worldIdExternalNullifierHash, address(capabilityRegistry)
-        );
+        registry = new VeyraRegistry(address(capabilityRegistry), registrar);
 
         vm.stopBroadcast();
 
         console2.log("CapabilityRegistry", address(capabilityRegistry));
         console2.log("VeyraRegistry     ", address(registry));
-        console2.log("World ID verifier ", worldIdAddress);
-        console2.log("World ID group ID ", worldIdGroupId);
-        console2.log("External nullifier", worldIdExternalNullifierHash);
+        console2.log("Owner             ", deployer);
+        console2.log("Registrar         ", registrar);
         console2.log("Audit emitter     ", emitter);
     }
 }

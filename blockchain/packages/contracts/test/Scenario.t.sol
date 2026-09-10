@@ -3,14 +3,7 @@ pragma solidity 0.8.28;
 
 import {Test, console2} from "forge-std/Test.sol";
 import {CapabilityRegistry} from "../src/CapabilityRegistry.sol";
-import {IWorldID, VeyraRegistry} from "../src/VeyraRegistry.sol";
-
-contract WorldIdStub is IWorldID {
-    function verifyProof(uint256, uint256, uint256, uint256, uint256, uint256[8] calldata)
-        external
-        override
-    {}
-}
+import {VeyraRegistry} from "../src/VeyraRegistry.sol";
 
 /// @notice Walks the demo end to end and prints observed state, so behaviour can be
 ///         compared against the design rather than assumed from it.
@@ -20,6 +13,7 @@ contract ScenarioTest is Test {
 
     address internal owner = address(0xC0FFEE);
     address internal emitter = address(0xE471);
+    address internal registrar = address(0x5E4E4);
     address internal alice = address(0xA11CE);
     address internal bob = address(0xB0B);
     address internal agent = address(0xA6E7);
@@ -30,144 +24,112 @@ contract ScenarioTest is Test {
     function setUp() public {
         vm.startPrank(owner);
         audit = new CapabilityRegistry(emitter);
-        gate = new VeyraRegistry(address(new WorldIdStub()), 1, 1, address(audit));
+        gate = new VeyraRegistry(address(audit), registrar);
         vm.stopPrank();
     }
 
-    /// @dev World ID's nullifier is deterministic in (identity, externalNullifier).
-    ///      This contract fixes externalNullifierHash at construction, so a given human
-    ///      produces the SAME nullifier for every authorization, forever.
-    function test_CanAliceAuthorizeTwice() public {
-        uint256[8] memory proof;
-
+    /// @dev The bug that used to kill the demo: a fixed external nullifier meant one
+    ///      human had one usable World ID nullifier for the life of the deployment, so
+    ///      they could authorize exactly once. Replay is now scoped to the paid
+    ///      request instead, so this must succeed repeatedly.
+    function test_AliceCanAuthorizeRepeatedly() public {
         vm.startPrank(alice);
         gate.registerUser(hex"a11ce5ec", 0);
         gate.storeSecret(COINGECKO, "coingecko.price.read", hex"c0de01");
         gate.storeSecret(USDC, "usdc.transfer", hex"c0de02");
 
-        // Alice's real World ID nullifier for this app+action. It does not change.
-        uint256 aliceNullifier = 0xA11CE;
+        gate.authorizeAgent(agent, COINGECKO, 0xA11CE, bytes32("req-1"));
+        console2.log("1st authorization (coingecko, req-1): OK");
 
-        gate.authorizeAgent(agent, COINGECKO, 1, aliceNullifier, proof, bytes32("req-1"));
-        console2.log("first authorization (coingecko): OK");
+        gate.authorizeAgent(agent, USDC, 0xA11CE, bytes32("req-2"));
+        console2.log("2nd authorization (usdc, req-2):      OK  <- used to be impossible");
 
-        try gate.authorizeAgent(agent, USDC, 1, aliceNullifier, proof, bytes32("req-2")) {
-            console2.log("second authorization (usdc): OK");
-        } catch {
-            console2.log("second authorization (usdc): BLOCKED - nullifier already spent");
-            console2.log("  -> a human can authorize exactly ONCE, ever, against this contract");
-        }
+        gate.authorizeAgent(agent, COINGECKO, 0xA11CE, bytes32("req-3"));
+        console2.log("3rd authorization (coingecko, req-3): OK");
         vm.stopPrank();
     }
 
     function test_Walkthrough() public {
-        uint256[8] memory proof;
-
-        console2.log("=== 1. two users connect wallets ===");
-        vm.prank(alice);
-        gate.registerUser(hex"a11ce5ec", 0);
-        vm.prank(bob);
-        gate.registerUser(hex"b0b5ec", 1);
+        console2.log("=== 1. two users register (server-side, via registrar) ===");
+        vm.startPrank(registrar);
+        gate.registerUserFor(alice, hex"a11ce5ec", 0);
+        gate.registerUserFor(bob, hex"b0b5ec", 1);
+        vm.stopPrank();
         console2.log("users registered:", gate.userCount());
         console2.log("alice leaf index:", gate.getUser(alice).leafIndex);
         console2.log("bob leaf index:  ", gate.getUser(bob).leafIndex);
 
         console2.log("");
-        console2.log("=== 2. alice stores two encrypted secrets ===");
-        vm.startPrank(alice);
-        gate.storeSecret(COINGECKO, "coingecko.price.read", hex"c0de01");
-        gate.storeSecret(USDC, "usdc.transfer", hex"c0de02");
+        console2.log("=== 2. backend stores each user's encrypted secrets ===");
+        vm.startPrank(registrar);
+        gate.storeSecretFor(alice, COINGECKO, "coingecko.price.read", hex"a11ce001");
+        gate.storeSecretFor(alice, USDC, "usdc.transfer", hex"a11ce002");
+        gate.storeSecretFor(bob, COINGECKO, "coingecko.price.read", hex"b0b001");
         vm.stopPrank();
-        console2.log("alice secret count:", gate.secretIdsOf(alice).length);
-        console2.log("bob secret count:  ", gate.secretIdsOf(bob).length);
-        console2.log("usdc ciphertext version:", gate.getSecret(alice, USDC).version);
+        console2.log("alice secrets:", gate.secretIdsOf(alice).length);
+        console2.log("bob secrets:  ", gate.secretIdsOf(bob).length);
+        console2.log(
+            "alice usdc ciphertext differs from bob's coingecko:",
+            keccak256(gate.getSecret(alice, USDC).ciphertext)
+                != keccak256(gate.getSecret(bob, COINGECKO).ciphertext)
+        );
 
         console2.log("");
-        console2.log("=== 3. can bob authorize against alice's secret? ===");
+        console2.log("=== 3. can bob reach alice's secret? ===");
         vm.prank(bob);
-        try gate.authorizeAgent(agent, USDC, 1, 100, proof, bytes32("req-x")) {
+        try gate.authorizeAgent(agent, USDC, 1, bytes32("req-x")) {
             console2.log("!! BOB SUCCEEDED - cross-user access is possible");
         } catch {
             console2.log("blocked: bob cannot reach alice's secret");
         }
 
         console2.log("");
-        console2.log("=== 4. alice authorizes the agent (x402 requestId req-1) ===");
+        console2.log("=== 4. alice authorizes, twice, on two paid requests ===");
+        vm.startPrank(alice);
+        gate.authorizeAgent(agent, COINGECKO, 0xA11CE, bytes32("req-1"));
+        gate.authorizeAgent(agent, USDC, 0xA11CE, bytes32("req-2"));
+        vm.stopPrank();
+        console2.log("req-1 used:", gate.requestIdUsed(bytes32("req-1")));
+        console2.log("req-2 used:", gate.requestIdUsed(bytes32("req-2")));
+
+        console2.log("");
+        console2.log("=== 5. can a paid request be replayed? ===");
         vm.prank(alice);
-        gate.authorizeAgent(agent, USDC, 1, 101, proof, bytes32("req-1"));
-        console2.log("nullifier 101 spent:", gate.nullifierHashUsed(101));
+        try gate.authorizeAgent(agent, USDC, 0xA11CE, bytes32("req-2")) {
+            console2.log("!! REPLAY SUCCEEDED");
+        } catch {
+            console2.log("blocked: request id is single-use");
+        }
 
         console2.log("");
-        console2.log("=== 5. emitter mirrors the decision into the audit log ===");
-        CapabilityRegistry.DecisionRecord[] memory batch = new CapabilityRegistry.DecisionRecord[](1);
-        batch[0] = CapabilityRegistry.DecisionRecord({
-            decisionId: bytes32("d1"),
-            agent: agent,
-            resource: USDC,
-            decision: uint8(CapabilityRegistry.Decision.Allow),
-            reasonCode: 1000,
-            notionalUsdE6: 240_000_000,
-            tierAtDecision: uint8(CapabilityRegistry.Tier.Verified),
-            confirmationMode: uint8(CapabilityRegistry.ConfirmationMode.LedgerEip712),
-            paramsHash: keccak256("to=0x..,amount=240"),
-            occurredAt: 1_757_000_000
-        });
-        vm.prank(emitter);
-        console2.log("records written:", audit.recordDecisions(batch));
-        vm.prank(emitter);
-        console2.log("same batch resubmitted, written:", audit.recordDecisions(batch));
-
-        console2.log("");
-        console2.log("=== 6. detector spots value creep, downgrades the tier ===");
-        vm.prank(emitter);
-        audit.updateRiskScore(
-            agent,
-            820,
-            uint8(CapabilityRegistry.Tier.Elevated),
-            uint8(CapabilityRegistry.Tier.Verified),
-            keccak256("drift"),
-            1_757_000_100
-        );
-        console2.log("risk score recorded on chain (event only, no storage)");
-
-        console2.log("");
-        console2.log("=== 7. owner pulls the kill switch ===");
+        console2.log("=== 6. owner pulls the kill switch ===");
         vm.prank(owner);
         audit.revokeAgent(agent, 4001);
         console2.log("agent revoked:", audit.isRevoked(agent));
 
         vm.prank(alice);
-        try gate.authorizeAgent(agent, USDC, 1, 102, proof, bytes32("req-2")) {
-            console2.log("!! AUTHORIZED AFTER REVOCATION - kill switch is not wired");
+        try gate.authorizeAgent(agent, COINGECKO, 0xA11CE, bytes32("req-3")) {
+            console2.log("!! AUTHORIZED AFTER REVOCATION - kill switch not wired");
         } catch {
             console2.log("blocked: revoked agent cannot be authorized");
         }
 
         console2.log("");
-        console2.log("=== 8. can the emitter still log for a revoked agent? ===");
-        batch[0].decisionId = bytes32("d2");
-        vm.prank(emitter);
-        uint256 w = audit.recordDecisions(batch);
-        console2.log("post-revocation decisions still recorded:", w);
-        console2.log("(by design: the log is append-only truth, not an enforcement point)");
-
-        console2.log("");
-        console2.log("=== 9. alice revokes her own secret ===");
+        console2.log("=== 7. alice revokes her own secret ===");
         vm.prank(owner);
         audit.reinstateAgent(agent);
         vm.prank(alice);
         gate.revokeSecret(USDC);
         vm.prank(alice);
-        try gate.authorizeAgent(agent, USDC, 1, 103, proof, bytes32("req-3")) {
+        try gate.authorizeAgent(agent, USDC, 0xA11CE, bytes32("req-4")) {
             console2.log("!! AUTHORIZED A REVOKED SECRET");
         } catch {
             console2.log("blocked: inactive secret cannot be authorized");
         }
 
         console2.log("");
-        console2.log("=== 10. is the ciphertext still readable after revocation? ===");
-        bytes memory stillThere = gate.getSecret(alice, USDC).ciphertext;
-        console2.log("ciphertext length still on chain:", stillThere.length);
+        console2.log("=== 8. is the ciphertext still readable after revocation? ===");
+        console2.log("ciphertext length still on chain:", gate.getSecret(alice, USDC).ciphertext.length);
         console2.log("active flag:", gate.getSecret(alice, USDC).active);
     }
 }

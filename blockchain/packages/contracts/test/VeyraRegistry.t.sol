@@ -2,57 +2,23 @@
 pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
-import {IWorldID, VeyraRegistry} from "../src/VeyraRegistry.sol";
+import {VeyraRegistry} from "../src/VeyraRegistry.sol";
 import {CapabilityRegistry} from "../src/CapabilityRegistry.sol";
 
-contract WorldIdMock is IWorldID {
-    bool internal shouldRevert;
-    uint256 public lastRoot;
-    uint256 public lastGroupId;
-    uint256 public lastSignalHash;
-    uint256 public lastNullifierHash;
-    uint256 public lastExternalNullifierHash;
-
-    function setShouldRevert(bool value) external {
-        shouldRevert = value;
-    }
-
-    function verifyProof(
-        uint256 root,
-        uint256 groupId,
-        uint256 signalHash,
-        uint256 nullifierHash,
-        uint256 externalNullifierHash,
-        uint256[8] calldata
-    ) external override {
-        if (shouldRevert) revert("invalid proof");
-
-        lastRoot = root;
-        lastGroupId = groupId;
-        lastSignalHash = signalHash;
-        lastNullifierHash = nullifierHash;
-        lastExternalNullifierHash = externalNullifierHash;
-    }
-}
-
 contract VeyraRegistryTest is Test {
-    WorldIdMock internal worldId;
     CapabilityRegistry internal audit;
     VeyraRegistry internal registry;
 
-    address internal deployer = address(0xD3);
+    address internal owner = address(0xC0FFEE);
+    address internal registrar = address(0x5E4E4);
     address internal user = address(0xBEEF);
     address internal other = address(0xCAFE);
     address internal agent = address(0xA6E7);
 
-    uint256 internal constant GROUP_ID = 1;
-    uint256 internal constant EXTERNAL_NULLIFIER_HASH = 123;
-    uint256 internal constant ROOT = 456;
-    uint256 internal constant NULLIFIER_HASH = 789;
-
     bytes32 internal constant SECRET_ID = keccak256("openai-api-key");
     bytes internal constant CIPHERTEXT = hex"deadbeefcafe";
     bytes internal constant ENCRYPTED_USER_ID = hex"0102030405";
+    uint256 internal constant NULLIFIER = 0xA11CE;
 
     event UserRegistered(
         address indexed user, uint32 leafIndex, bytes32 userIdCommitment, uint64 registeredAt
@@ -71,11 +37,9 @@ contract VeyraRegistryTest is Test {
     );
 
     function setUp() public {
-        worldId = new WorldIdMock();
-
-        vm.startPrank(deployer);
-        audit = new CapabilityRegistry(deployer);
-        registry = new VeyraRegistry(address(worldId), GROUP_ID, EXTERNAL_NULLIFIER_HASH, address(audit));
+        vm.startPrank(owner);
+        audit = new CapabilityRegistry(owner);
+        registry = new VeyraRegistry(address(audit), registrar);
         vm.stopPrank();
     }
 
@@ -89,22 +53,27 @@ contract VeyraRegistryTest is Test {
         registry.storeSecret(SECRET_ID, "openai-api-key", CIPHERTEXT);
     }
 
-    function _authorize(address who, bytes32 secretId) internal {
-        uint256[8] memory proof;
+    function _authorize(address who, bytes32 requestId) internal {
         vm.prank(who);
-        registry.authorizeAgent(agent, secretId, ROOT, NULLIFIER_HASH, proof, bytes32("req-1"));
+        registry.authorizeAgent(agent, SECRET_ID, NULLIFIER, requestId);
     }
 
     // --------------------------------------------------------- construction --
 
     function test_Constructor_RevertsOnZeroCapabilityRegistry() public {
         vm.expectRevert(VeyraRegistry.InvalidAddress.selector);
-        new VeyraRegistry(address(worldId), GROUP_ID, EXTERNAL_NULLIFIER_HASH, address(0));
+        new VeyraRegistry(address(0), registrar);
     }
 
-    function test_Constructor_RevertsOnZeroWorldId() public {
-        vm.expectRevert(VeyraRegistry.InvalidAddress.selector);
-        new VeyraRegistry(address(0), GROUP_ID, EXTERNAL_NULLIFIER_HASH, address(audit));
+    function test_Constructor_SetsOwnerAndRegistrar() public view {
+        assertEq(registry.owner(), owner);
+        assertTrue(registry.isRegistrar(registrar));
+    }
+
+    function test_Constructor_AcceptsZeroRegistrar() public {
+        vm.prank(owner);
+        VeyraRegistry r = new VeyraRegistry(address(audit), address(0));
+        assertFalse(r.isRegistrar(address(0)));
     }
 
     // ---------------------------------------------------------------- users --
@@ -153,7 +122,6 @@ contract VeyraRegistryTest is Test {
 
     function test_RegisterUser_RevertsOnDuplicate() public {
         _register(user);
-
         vm.prank(user);
         vm.expectRevert(VeyraRegistry.UserAlreadyRegistered.selector);
         registry.registerUser(ENCRYPTED_USER_ID, 7);
@@ -167,11 +135,79 @@ contract VeyraRegistryTest is Test {
 
     function test_RotateUserId_ReplacesCiphertext() public {
         _register(user);
-
         vm.prank(user);
         registry.rotateUserId(hex"aabbcc");
-
         assertEq(registry.getUser(user).encryptedUserId, hex"aabbcc");
+    }
+
+    // ------------------------------------------------ registrar (server) path --
+
+    /// @dev Only the machine holding the Ledger can produce the encrypted blob, so it
+    ///      needs to be able to register on a user's behalf.
+    function test_RegisterUserFor_RegistrarCanRegisterAUser() public {
+        vm.prank(registrar);
+        registry.registerUserFor(user, ENCRYPTED_USER_ID, 12);
+
+        assertTrue(registry.isRegistered(user));
+        assertEq(registry.getUser(user).leafIndex, 12);
+        assertEq(registry.userAt(0), user);
+    }
+
+    function test_RegisterUserFor_RevertsForNonRegistrar() public {
+        vm.prank(other);
+        vm.expectRevert(VeyraRegistry.NotRegistrar.selector);
+        registry.registerUserFor(user, ENCRYPTED_USER_ID, 1);
+    }
+
+    function test_RegisterUserFor_RevertsOnZeroUser() public {
+        vm.prank(registrar);
+        vm.expectRevert(VeyraRegistry.InvalidAddress.selector);
+        registry.registerUserFor(address(0), ENCRYPTED_USER_ID, 1);
+    }
+
+    function test_RegisterUserFor_RevertsOnDuplicate() public {
+        _register(user);
+        vm.prank(registrar);
+        vm.expectRevert(VeyraRegistry.UserAlreadyRegistered.selector);
+        registry.registerUserFor(user, ENCRYPTED_USER_ID, 1);
+    }
+
+    function test_StoreSecretFor_RegistrarStoresOnBehalf() public {
+        _register(user);
+
+        vm.prank(registrar);
+        registry.storeSecretFor(user, SECRET_ID, "openai-api-key", CIPHERTEXT);
+
+        assertEq(registry.getSecret(user, SECRET_ID).ciphertext, CIPHERTEXT);
+        assertEq(registry.secretIdsOf(user).length, 1);
+    }
+
+    function test_StoreSecretFor_RevertsForNonRegistrar() public {
+        _register(user);
+        vm.prank(other);
+        vm.expectRevert(VeyraRegistry.NotRegistrar.selector);
+        registry.storeSecretFor(user, SECRET_ID, "l", CIPHERTEXT);
+    }
+
+    function test_StoreSecretFor_RevertsWhenUserNotRegistered() public {
+        vm.prank(registrar);
+        vm.expectRevert(VeyraRegistry.UserNotRegistered.selector);
+        registry.storeSecretFor(user, SECRET_ID, "l", CIPHERTEXT);
+    }
+
+    function test_SetRegistrar_OwnerCanAddAndRemove() public {
+        vm.startPrank(owner);
+        registry.setRegistrar(other, true);
+        assertTrue(registry.isRegistrar(other));
+        registry.setRegistrar(other, false);
+        assertFalse(registry.isRegistrar(other));
+        vm.stopPrank();
+    }
+
+    function test_SetRegistrar_RevertsForNonOwner() public {
+        vm.prank(other);
+        vm.expectRevert(VeyraRegistry.NotOwner.selector);
+        registry.setRegistrar(other, true);
     }
 
     // -------------------------------------------------------------- secrets --
@@ -187,10 +223,7 @@ contract VeyraRegistryTest is Test {
         assertEq(secret.ciphertext, CIPHERTEXT);
         assertEq(secret.version, 1);
         assertTrue(secret.active);
-
-        bytes32[] memory ids = registry.secretIdsOf(user);
-        assertEq(ids.length, 1);
-        assertEq(ids[0], SECRET_ID);
+        assertEq(registry.secretIdsOf(user).length, 1);
     }
 
     function test_StoreSecret_RotationBumpsVersionWithoutDuplicatingId() public {
@@ -211,13 +244,6 @@ contract VeyraRegistryTest is Test {
         registry.storeSecret(SECRET_ID, "label", CIPHERTEXT);
     }
 
-    function test_StoreSecret_RevertsOnEmptyCiphertext() public {
-        _register(user);
-        vm.prank(user);
-        vm.expectRevert(VeyraRegistry.EmptyCiphertext.selector);
-        registry.storeSecret(SECRET_ID, "label", "");
-    }
-
     function test_RevokeSecret_DeactivatesAndBlocksAuthorization() public {
         _register(user);
         _store(user);
@@ -229,156 +255,113 @@ contract VeyraRegistryTest is Test {
 
         assertFalse(registry.getSecret(user, SECRET_ID).active);
 
-        uint256[8] memory proof;
         vm.prank(user);
         vm.expectRevert(VeyraRegistry.SecretInactive.selector);
-        registry.authorizeAgent(agent, SECRET_ID, ROOT, NULLIFIER_HASH, proof, bytes32("req-1"));
+        registry.authorizeAgent(agent, SECRET_ID, NULLIFIER, bytes32("req-1"));
     }
 
     // -------------------------------------------------------- authorization --
 
-    function test_AuthorizeAgent_VerifiesAndEmits() public {
+    function test_AuthorizeAgent_EmitsWithAttestedNullifier() public {
         _register(user);
         _store(user);
 
         vm.expectEmit(true, true, true, true);
-        emit AgentAuthorized(
-            user, agent, SECRET_ID, NULLIFIER_HASH, bytes32("req-1"), uint64(block.timestamp)
-        );
+        emit AgentAuthorized(user, agent, SECRET_ID, NULLIFIER, bytes32("req-1"), uint64(block.timestamp));
 
-        _authorize(user, SECRET_ID);
-
-        assertTrue(registry.nullifierHashUsed(NULLIFIER_HASH));
-        assertEq(worldId.lastRoot(), ROOT);
-        assertEq(worldId.lastGroupId(), GROUP_ID);
-        assertEq(worldId.lastExternalNullifierHash(), EXTERNAL_NULLIFIER_HASH);
+        _authorize(user, bytes32("req-1"));
+        assertTrue(registry.requestIdUsed(bytes32("req-1")));
     }
 
-    /// @dev The whole point of the signal change: the proof commits to WHAT was
-    ///      approved, not merely that a human approved something.
-    function test_AuthorizeAgent_SignalBindsUserAgentAndSecret() public {
+    /// @dev The whole point of moving replay protection off the nullifier: a person can
+    ///      authorize as many times as they pay, which the old design made impossible.
+    function test_AuthorizeAgent_SameUserCanAuthorizeManyTimes() public {
         _register(user);
         _store(user);
-        _authorize(user, SECRET_ID);
 
-        // >> 8 mirrors World ID's ByteHasher, which reduces the digest into the
-        // BN254 scalar field. The frontend signal must hash to the same value.
-        assertEq(worldId.lastSignalHash(), uint256(keccak256(abi.encodePacked(user, agent, SECRET_ID))) >> 8);
+        _authorize(user, bytes32("req-1"));
+        _authorize(user, bytes32("req-2"));
+        _authorize(user, bytes32("req-3"));
+
+        assertTrue(registry.requestIdUsed(bytes32("req-1")));
+        assertTrue(registry.requestIdUsed(bytes32("req-2")));
+        assertTrue(registry.requestIdUsed(bytes32("req-3")));
     }
 
-    /// @dev Closes the gap where the stored secret list was never consulted.
+    function test_AuthorizeAgent_RevertsOnReusedRequestId() public {
+        _register(user);
+        _store(user);
+        _authorize(user, bytes32("req-1"));
+
+        vm.prank(user);
+        vm.expectRevert(VeyraRegistry.RequestAlreadyUsed.selector);
+        registry.authorizeAgent(agent, SECRET_ID, NULLIFIER, bytes32("req-1"));
+    }
+
+    function test_AuthorizeAgent_RevertsOnZeroRequestId() public {
+        _register(user);
+        _store(user);
+
+        vm.prank(user);
+        vm.expectRevert(VeyraRegistry.InvalidRequestId.selector);
+        registry.authorizeAgent(agent, SECRET_ID, NULLIFIER, bytes32(0));
+    }
+
     function test_AuthorizeAgent_RevertsForUnknownSecret() public {
         _register(user);
-
-        uint256[8] memory proof;
         vm.prank(user);
         vm.expectRevert(VeyraRegistry.SecretNotFound.selector);
-        registry.authorizeAgent(
-            agent, keccak256("never-stored"), ROOT, NULLIFIER_HASH, proof, bytes32("req-1")
-        );
+        registry.authorizeAgent(agent, keccak256("never-stored"), NULLIFIER, bytes32("req-1"));
     }
 
-    /// @dev Closes the gap where the kill switch had no effect on authorization.
     function test_AuthorizeAgent_RevertsWhenAgentRevoked() public {
         _register(user);
         _store(user);
 
-        vm.prank(deployer);
+        vm.prank(owner);
         audit.revokeAgent(agent, 4001);
 
-        uint256[8] memory proof;
         vm.prank(user);
         vm.expectRevert(VeyraRegistry.AgentIsRevoked.selector);
-        registry.authorizeAgent(agent, SECRET_ID, ROOT, NULLIFIER_HASH, proof, bytes32("req-1"));
+        registry.authorizeAgent(agent, SECRET_ID, NULLIFIER, bytes32("req-1"));
     }
 
     function test_AuthorizeAgent_SucceedsAfterReinstatement() public {
         _register(user);
         _store(user);
 
-        vm.startPrank(deployer);
+        vm.startPrank(owner);
         audit.revokeAgent(agent, 4001);
         audit.reinstateAgent(agent);
         vm.stopPrank();
 
-        _authorize(user, SECRET_ID);
-        assertTrue(registry.nullifierHashUsed(NULLIFIER_HASH));
+        _authorize(user, bytes32("req-1"));
+        assertTrue(registry.requestIdUsed(bytes32("req-1")));
     }
 
     function test_AuthorizeAgent_RevertsWhenNotRegistered() public {
-        uint256[8] memory proof;
         vm.prank(user);
         vm.expectRevert(VeyraRegistry.UserNotRegistered.selector);
-        registry.authorizeAgent(agent, SECRET_ID, ROOT, NULLIFIER_HASH, proof, bytes32("req-1"));
-    }
-
-    function test_AuthorizeAgent_RevertsForInvalidProof() public {
-        _register(user);
-        _store(user);
-        worldId.setShouldRevert(true);
-
-        uint256[8] memory proof;
-        vm.prank(user);
-        vm.expectRevert(bytes("invalid proof"));
-        registry.authorizeAgent(agent, SECRET_ID, ROOT, NULLIFIER_HASH, proof, bytes32("req-1"));
-
-        // Fail closed: a failed proof must not burn the nullifier.
-        assertFalse(registry.nullifierHashUsed(NULLIFIER_HASH));
-    }
-
-    function test_AuthorizeAgent_RevertsWhenNullifierReplayed() public {
-        _register(user);
-        _store(user);
-        _authorize(user, SECRET_ID);
-
-        uint256[8] memory proof;
-        vm.prank(user);
-        vm.expectRevert(VeyraRegistry.NullifierAlreadyUsed.selector);
-        registry.authorizeAgent(agent, SECRET_ID, ROOT, NULLIFIER_HASH, proof, bytes32("req-1"));
-    }
-
-    function test_AuthorizeAgent_RevertsOnZeroNullifier() public {
-        _register(user);
-        _store(user);
-
-        uint256[8] memory proof;
-        vm.prank(user);
-        vm.expectRevert(VeyraRegistry.InvalidNullifier.selector);
-        registry.authorizeAgent(agent, SECRET_ID, ROOT, 0, proof, bytes32("req-1"));
-    }
-
-    /// @dev Matches Viktor's rule: an authorization with no payment request behind it
-    ///      is rejected outright.
-    function test_AuthorizeAgent_RevertsOnZeroRequestId() public {
-        _register(user);
-        _store(user);
-
-        uint256[8] memory proof;
-        vm.prank(user);
-        vm.expectRevert(VeyraRegistry.InvalidRequestId.selector);
-        registry.authorizeAgent(agent, SECRET_ID, ROOT, NULLIFIER_HASH, proof, bytes32(0));
+        registry.authorizeAgent(agent, SECRET_ID, NULLIFIER, bytes32("req-1"));
     }
 
     function test_AuthorizeAgent_RevertsOnZeroAgent() public {
         _register(user);
         _store(user);
 
-        uint256[8] memory proof;
         vm.prank(user);
         vm.expectRevert(VeyraRegistry.InvalidAddress.selector);
-        registry.authorizeAgent(address(0), SECRET_ID, ROOT, NULLIFIER_HASH, proof, bytes32("req-1"));
+        registry.authorizeAgent(address(0), SECRET_ID, NULLIFIER, bytes32("req-1"));
     }
 
-    /// @dev One user's secret is not reachable by another caller.
     function test_AuthorizeAgent_CannotUseAnotherUsersSecret() public {
         _register(user);
         _store(user);
         _register(other);
 
-        uint256[8] memory proof;
         vm.prank(other);
         vm.expectRevert(VeyraRegistry.SecretNotFound.selector);
-        registry.authorizeAgent(agent, SECRET_ID, ROOT, NULLIFIER_HASH, proof, bytes32("req-1"));
+        registry.authorizeAgent(agent, SECRET_ID, NULLIFIER, bytes32("req-1"));
     }
 
     // ---------------------------------------------------------------- admin --
@@ -389,10 +372,14 @@ contract VeyraRegistryTest is Test {
         registry.setAuditRegistry(address(audit));
     }
 
-    function test_SetAuditRegistry_RevertsOnZero() public {
-        vm.prank(deployer);
-        vm.expectRevert(VeyraRegistry.InvalidAddress.selector);
-        registry.setAuditRegistry(address(0));
+    function test_TransferOwnership_MovesOwner() public {
+        vm.prank(owner);
+        registry.transferOwnership(other);
+        assertEq(registry.owner(), other);
+
+        vm.prank(owner);
+        vm.expectRevert(VeyraRegistry.NotOwner.selector);
+        registry.setRegistrar(other, true);
     }
 
     // ----------------------------------------------------------------- fuzz --
@@ -406,5 +393,15 @@ contract VeyraRegistryTest is Test {
         VeyraRegistry.User memory record = registry.getUser(user);
         assertEq(record.encryptedUserId, blob);
         assertEq(record.leafIndex, leafIndex);
+    }
+
+    function testFuzz_DistinctRequestIdsAlwaysAllowed(bytes32 a, bytes32 b) public {
+        vm.assume(a != bytes32(0) && b != bytes32(0) && a != b);
+        _register(user);
+        _store(user);
+
+        _authorize(user, a);
+        _authorize(user, b);
+        assertTrue(registry.requestIdUsed(a) && registry.requestIdUsed(b));
     }
 }

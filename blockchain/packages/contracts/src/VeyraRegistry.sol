@@ -1,17 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-interface IWorldID {
-    function verifyProof(
-        uint256 root,
-        uint256 groupId,
-        uint256 signalHash,
-        uint256 nullifierHash,
-        uint256 externalNullifierHash,
-        uint256[8] calldata proof
-    ) external;
-}
-
 /// @dev Only the slice of CapabilityRegistry this contract needs. Keeping it narrow
 ///      means the audit contract can evolve without redeploying the gate.
 interface ICapabilityRegistry {
@@ -19,8 +8,21 @@ interface ICapabilityRegistry {
 }
 
 /// @title  VeyraRegistry
-/// @notice The authorization gate. Holds each user's secrets as ciphertext and lets a
-///         World ID-verified human authorize an agent to use one of them.
+/// @notice The authorization gate. Holds each user's secrets as ciphertext and records
+///         which agent a user authorized against which secret.
+///
+/// @dev    PROOF OF PERSONHOOD IS VERIFIED OFF CHAIN. The backend verifies the World ID
+///         proof against the Developer Portal before it will act on an authorization,
+///         and only then does it release a secret. This contract deliberately does not
+///         re-verify: an on-chain `verifyProof` would need the external nullifier to
+///         match what IDKit derived, and a fixed external nullifier gives a human ONE
+///         usable nullifier for the life of the deployment — meaning each person could
+///         authorize exactly once, ever. Replay is scoped to the payment request
+///         instead, which is the unit that should actually be single-use.
+///
+///         So `nullifierHash` below is an ATTESTATION, not a verification. Anyone can
+///         put any value there. It is recorded because the backend, which did verify,
+///         is the thing that acts on it — never trust this field on its own.
 ///
 /// @dev    WHAT THIS CONTRACT DOES NOT DO: it never encrypts or decrypts anything.
 ///         Solidity cannot hold a secret — every byte here is public and permanent.
@@ -41,7 +43,7 @@ interface ICapabilityRegistry {
 ///             "this address is a Veyra user" is public by construction.
 ///
 ///         Authorization is fail-closed: any missing signal, inactive secret, revoked
-///         agent, reused nullifier, or failing proof reverts the whole call.
+///         agent, or reused request id reverts the whole call.
 contract VeyraRegistry {
     // ------------------------------------------------------------------ types --
 
@@ -63,6 +65,7 @@ contract VeyraRegistry {
     // ----------------------------------------------------------------- errors --
 
     error NotOwner();
+    error NotRegistrar();
     error InvalidAddress();
     error EmptyUserId();
     error EmptyCiphertext();
@@ -71,10 +74,9 @@ contract VeyraRegistry {
     error UserAlreadyRegistered();
     error SecretNotFound();
     error SecretInactive();
-    error InvalidNullifier();
-    error NullifierAlreadyUsed();
-    error AgentIsRevoked();
     error InvalidRequestId();
+    error RequestAlreadyUsed();
+    error AgentIsRevoked();
 
     // ----------------------------------------------------------------- events --
 
@@ -90,12 +92,9 @@ contract VeyraRegistry {
 
     event SecretRevoked(address indexed user, bytes32 indexed secretId, uint64 revokedAt);
 
-    /// @dev The event the backend listener fires on. `secretId` is a bytes32 hash to
-    ///      match CapabilityRegistry's `resource`, so both contracts key the same
-    ///      concept the same way and the subgraph needs no translation table.
-    ///      `requestId` is the key of the off-chain x402 payment request. The backend
-    ///      queue claims a pending request by this id when the event lands, so it must
-    ///      be present — an authorization with no payment behind it is rejected.
+    /// @dev Signature deliberately unchanged from the previous version so the backend
+    ///      listener keeps parsing it without modification.
+    ///      `nullifierHash` is attested off chain — see the contract notice.
     event AgentAuthorized(
         address indexed user,
         address indexed agent,
@@ -105,6 +104,7 @@ contract VeyraRegistry {
         uint64 authorizedAt
     );
 
+    event RegistrarSet(address indexed registrar, bool allowed);
     event AuditRegistrySet(address indexed auditRegistry);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
@@ -112,13 +112,15 @@ contract VeyraRegistry {
 
     address public owner;
 
-    IWorldID public immutable worldId;
-    uint256 public immutable groupId;
-    uint256 public immutable externalNullifierHash;
-
     /// @dev Source of truth for agent revocation. Required at construction so the kill
     ///      switch can never be silently absent — deploy CapabilityRegistry first.
     ICapabilityRegistry public auditRegistry;
+
+    /// @dev Backend keys allowed to register users and store secrets on their behalf.
+    ///      Only the server holds the Ledger, so only the server can produce ciphertext.
+    ///      This is a trust concentration, but not a new one: that server can already
+    ///      decrypt every secret it stores.
+    mapping(address => bool) public isRegistrar;
 
     address[] private _userAddresses;
     mapping(address => User) private _users;
@@ -126,7 +128,10 @@ contract VeyraRegistry {
     mapping(address => bytes32[]) private _secretIds;
     mapping(address => mapping(bytes32 => Secret)) private _secrets;
 
-    mapping(uint256 => bool) public nullifierHashUsed;
+    /// @dev One authorization per paid request. This replaces nullifier-based replay
+    ///      protection: a payment request is the thing that should be single-use, and
+    ///      unlike a World ID nullifier a fresh one exists for every request.
+    mapping(bytes32 => bool) public requestIdUsed;
 
     // -------------------------------------------------------------- modifiers --
 
@@ -135,30 +140,38 @@ contract VeyraRegistry {
         _;
     }
 
+    modifier onlyRegistrar() {
+        if (!isRegistrar[msg.sender]) revert NotRegistrar();
+        _;
+    }
+
     modifier onlyRegistered() {
         if (!_users[msg.sender].exists) revert UserNotRegistered();
         _;
     }
 
-    constructor(
-        address worldIdAddress,
-        uint256 worldIdGroupId,
-        uint256 worldIdExternalNullifierHash,
-        address capabilityRegistry
-    ) {
-        if (worldIdAddress == address(0) || capabilityRegistry == address(0)) revert InvalidAddress();
+    constructor(address capabilityRegistry, address initialRegistrar) {
+        if (capabilityRegistry == address(0)) revert InvalidAddress();
 
         owner = msg.sender;
-        worldId = IWorldID(worldIdAddress);
-        groupId = worldIdGroupId;
-        externalNullifierHash = worldIdExternalNullifierHash;
         auditRegistry = ICapabilityRegistry(capabilityRegistry);
 
         emit OwnershipTransferred(address(0), msg.sender);
         emit AuditRegistrySet(capabilityRegistry);
+
+        if (initialRegistrar != address(0)) {
+            isRegistrar[initialRegistrar] = true;
+            emit RegistrarSet(initialRegistrar, true);
+        }
     }
 
     // -------------------------------------------------------------------- admin --
+
+    function setRegistrar(address registrar, bool allowed) external onlyOwner {
+        if (registrar == address(0)) revert InvalidAddress();
+        isRegistrar[registrar] = allowed;
+        emit RegistrarSet(registrar, allowed);
+    }
 
     function setAuditRegistry(address capabilityRegistry) external onlyOwner {
         if (capabilityRegistry == address(0)) revert InvalidAddress();
@@ -173,28 +186,37 @@ contract VeyraRegistry {
         emit OwnershipTransferred(previous, newOwner);
     }
 
-    // --------------------------------------------------------------- users --
+    // ---------------------------------------------------------------- users --
 
-    /// @notice Called when a user first connects their wallet. Appends them to the
-    ///         enumerable user list and stores their encrypted identifier.
-    /// @param encryptedUserId Ciphertext of the user's internal id, sealed server-side.
-    ///        The contract treats it as opaque bytes and never inspects it.
-    /// @param leafIndex The BIP32 leaf index the server derives this user's key at.
-    ///        Public by necessity — an index reveals nothing without the seed.
+    /// @notice Register yourself. Called when a user connects their wallet and signs.
     function registerUser(bytes calldata encryptedUserId, uint32 leafIndex) external {
-        if (encryptedUserId.length == 0) revert EmptyUserId();
-        if (_users[msg.sender].exists) revert UserAlreadyRegistered();
+        _register(msg.sender, encryptedUserId, leafIndex);
+    }
 
-        _users[msg.sender] = User({
+    /// @notice Register a user from the backend. The encrypted id can only be produced
+    ///         by the machine holding the Ledger, so this saves a round trip and a
+    ///         wallet confirmation in the demo flow.
+    function registerUserFor(address user, bytes calldata encryptedUserId, uint32 leafIndex)
+        external
+        onlyRegistrar
+    {
+        if (user == address(0)) revert InvalidAddress();
+        _register(user, encryptedUserId, leafIndex);
+    }
+
+    function _register(address user, bytes calldata encryptedUserId, uint32 leafIndex) private {
+        if (encryptedUserId.length == 0) revert EmptyUserId();
+        if (_users[user].exists) revert UserAlreadyRegistered();
+
+        _users[user] = User({
             encryptedUserId: encryptedUserId,
             leafIndex: leafIndex,
             registeredAt: uint64(block.timestamp),
             exists: true
         });
+        _userAddresses.push(user);
 
-        _userAddresses.push(msg.sender);
-
-        emit UserRegistered(msg.sender, leafIndex, keccak256(encryptedUserId), uint64(block.timestamp));
+        emit UserRegistered(user, leafIndex, keccak256(encryptedUserId), uint64(block.timestamp));
     }
 
     /// @notice Replace the stored ciphertext, e.g. after the server rotates its key.
@@ -238,24 +260,35 @@ contract VeyraRegistry {
 
     // ------------------------------------------------------------- secrets --
 
-    /// @notice Store or rotate an encrypted secret. Rotation bumps `version` and
-    ///         reactivates the entry, so one call covers both cases.
-    /// @param secretId keccak256 of the secret's name — same shape as
-    ///        CapabilityRegistry's `resource`.
-    /// @param ciphertext Encrypted under this user's BIP32 leaf key, server-side.
+    /// @notice Store or rotate one of your own encrypted secrets.
     function storeSecret(bytes32 secretId, string calldata label, bytes calldata ciphertext)
         external
         onlyRegistered
+    {
+        _store(msg.sender, secretId, label, ciphertext);
+    }
+
+    /// @notice Store a secret on a user's behalf, from the backend that encrypted it.
+    function storeSecretFor(address user, bytes32 secretId, string calldata label, bytes calldata ciphertext)
+        external
+        onlyRegistrar
+    {
+        if (!_users[user].exists) revert UserNotRegistered();
+        _store(user, secretId, label, ciphertext);
+    }
+
+    function _store(address user, bytes32 secretId, string calldata label, bytes calldata ciphertext)
+        private
     {
         if (secretId == bytes32(0)) revert SecretNotFound();
         if (bytes(label).length == 0) revert EmptyLabel();
         if (ciphertext.length == 0) revert EmptyCiphertext();
 
-        Secret storage existing = _secrets[msg.sender][secretId];
+        Secret storage existing = _secrets[user][secretId];
         uint32 nextVersion = existing.version + 1;
 
         if (existing.version == 0) {
-            _secretIds[msg.sender].push(secretId);
+            _secretIds[user].push(secretId);
         }
 
         existing.ciphertext = ciphertext;
@@ -264,7 +297,7 @@ contract VeyraRegistry {
         existing.storedAt = uint64(block.timestamp);
         existing.active = true;
 
-        emit SecretStored(msg.sender, secretId, nextVersion, label, uint64(block.timestamp));
+        emit SecretStored(user, secretId, nextVersion, label, uint64(block.timestamp));
     }
 
     /// @notice Deactivate a secret so it can no longer be authorized.
@@ -289,34 +322,24 @@ contract VeyraRegistry {
 
     // ------------------------------------------------------- authorization --
 
-    /// @notice Authorize an agent to use one of the caller's secrets, gated on a World
-    ///         ID proof of personhood.
+    /// @notice Authorize an agent to use one of your secrets, for one paid request.
     ///
-    /// @dev    The signal binds the proof to (caller, agent, secretId). Signing only
-    ///         the caller would prove "a real human acted" while leaving WHAT they
-    ///         approved unconstrained — the same proof would carry any agent and any
-    ///         secret. The frontend MUST build its World ID signal identically:
-    ///           signal = keccak256(abi.encodePacked(user, agent, secretId))
+    /// @dev    Replay is scoped to `requestId`, not to a World ID nullifier. Each x402
+    ///         payment mints a fresh request id, so a person can authorize as often as
+    ///         they pay — while any single request stays single-use.
     ///
-    /// @param requestId Key of the off-chain x402 payment request this authorization
-    ///        settles. Recorded, never verified on chain — the contract cannot see an
-    ///        x402 payment, so the backend is the only thing that can confirm one. A
-    ///        non-zero value here proves nothing was paid; it only correlates.
-    function authorizeAgent(
-        address agentAddress,
-        bytes32 secretId,
-        uint256 root,
-        uint256 nullifierHash,
-        uint256[8] calldata proof,
-        bytes32 requestId
-    ) external onlyRegistered {
+    /// @param nullifierHash The World ID nullifier the backend verified off chain.
+    ///        Recorded for audit only. NOT verified here, and not trustworthy alone.
+    /// @param requestId The off-chain x402 payment request this authorization settles.
+    function authorizeAgent(address agentAddress, bytes32 secretId, uint256 nullifierHash, bytes32 requestId)
+        external
+        onlyRegistered
+    {
         if (agentAddress == address(0)) revert InvalidAddress();
         if (requestId == bytes32(0)) revert InvalidRequestId();
-        if (nullifierHash == 0) revert InvalidNullifier();
-        if (nullifierHashUsed[nullifierHash]) revert NullifierAlreadyUsed();
+        if (requestIdUsed[requestId]) revert RequestAlreadyUsed();
 
-        // The secret must actually exist and be live. The previous design accepted any
-        // non-empty string, which made the stored allowlist decorative.
+        // The secret must actually exist and be live.
         Secret storage secret = _secrets[msg.sender][secretId];
         if (secret.version == 0) revert SecretNotFound();
         if (!secret.active) revert SecretInactive();
@@ -325,14 +348,7 @@ contract VeyraRegistry {
         // agent the operator had already revoked.
         if (auditRegistry.isRevoked(agentAddress)) revert AgentIsRevoked();
 
-        // Effects before interaction: burning the nullifier first means a reentrant
-        // call through verifyProof finds it already spent.
-        nullifierHashUsed[nullifierHash] = true;
-
-        // World ID's ByteHasher is keccak256 >> 8, so the digest fits the BN254
-        // scalar field. Omitting the shift yields a hash the router will never match.
-        uint256 signalHash = uint256(keccak256(abi.encodePacked(msg.sender, agentAddress, secretId))) >> 8;
-        worldId.verifyProof(root, groupId, signalHash, nullifierHash, externalNullifierHash, proof);
+        requestIdUsed[requestId] = true;
 
         emit AgentAuthorized(
             msg.sender, agentAddress, secretId, nullifierHash, requestId, uint64(block.timestamp)
