@@ -20,7 +20,7 @@ The Web2 applications under `apps/` are independently installable with npm. The 
 1. An agent submits a paid capability request to `POST /api/bazantic/requests`.
 2. The backend validates the payment adapter response and creates an ephemeral `pending_human_auth` request.
 3. The `/sandbox` route polls `GET /api/bazantic/pending` every three seconds and lets the developer select a request.
-4. The sandbox signs the selected secret identifier through `POST /api/world-id/sign`, opens `selfieCheckLegacy`, and stores the normalized World ID proof.
+4. The sandbox signs the selected secret identifier through `POST /api/world-id/sign`, opens `selfieCheckLegacy`, normalizes the returned World ID proof, and exposes the authorization prerequisites in the UI.
 5. The sandbox derives `secretId`, binds the World ID signal to human/agent/secret, and calls `VeyraRegistry.authorizeAgent` with the request ID.
 6. After receipt confirmation, the sandbox polls `GET /api/bazantic/requests/:requestId` while the chain listener claims the matching request, decrypts the allowlisted Ledger Key Ring secret, and calls the provider.
 7. The sandbox displays the final result or sanitized execution error.
@@ -41,6 +41,16 @@ The listener is intentionally asynchronous and read-only. It retries watcher fai
 ### Frontend Web3 integration
 
 The Next.js app is wrapped in `Web3Provider`, which provides Wagmi and React Query with an injected connector and a local Anvil chain (`31337`). The root page is unchanged; `/sandbox` is the end-to-end developer dashboard. It simulates requests, selects queue entries, captures IDKit proof, derives the current contract's `secretId`, submits `authorizeAgent` through `useWriteContract`, waits for receipt confirmation, and polls the backend result. Frontend configuration uses `NEXT_PUBLIC_RPC_URL` and `NEXT_PUBLIC_REGISTRY_ADDRESS`.
+
+### Sandbox proof handling and diagnostics
+
+`apps/frontend/src/app/sandbox/page.tsx` normalizes the IDKit payload before it can be submitted to `VeyraRegistry`:
+
+- Current v4 responses provide an eight-element `proof` array and `nullifier`.
+- v3/legacy responses provide an ABI-encoded proof string and `merkle_root`.
+- Legacy top-level payloads may provide `root`, `nullifier_hash`, and either proof representation.
+
+Normalization is wrapped in error handling and emits structured `[World ID]` console logs from `handleVerify`, `onSuccess`, `onError`, and the normalization failure path. The sandbox also renders an `Authorization checks` panel for the selected request, proof, wallet connection, wallet address, registry address, and authorization state. `canAuthorize` is based on the concrete request, proof, wallet, and registry prerequisites; the authorization state is displayed for diagnosis rather than used as a brittle timing gate.
 
 ## Backend
 

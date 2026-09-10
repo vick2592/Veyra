@@ -22,7 +22,7 @@ blockchain/  Web3 packages, contracts, and tooling
 1. An agent submits a paid request to `POST /api/bazantic/requests` with an idempotency key.
 2. The Bazantic adapter validates the request and payment headers before placing it in the ephemeral `pending_human_auth` Map queue.
 3. The endpoint returns `202` with a `requestId`; the sandbox polls `GET /api/bazantic/pending` every three seconds and lets the human select a request.
-4. The sandbox requests a short-lived RP signature from `POST /api/world-id/sign`, opens `IDKitRequestWidget` with `selfieCheckLegacy`, and stores the normalized World ID proof.
+4. The sandbox requests a short-lived RP signature from `POST /api/world-id/sign`, opens `IDKitRequestWidget` with `selfieCheckLegacy`, normalizes the returned World ID proof, and exposes the authorization prerequisites in the UI.
 5. After proof capture, the sandbox submits the selected agent, hashed secret ID, proof, and request ID through `VeyraRegistry.authorizeAgent`.
 6. The registry verifies the proof and emits `AgentAuthorized` with the hashed secret ID, nullifier, request ID, and timestamp.
 7. The chain listener waits for confirmations, claims the matching queued request, decrypts the allowlisted Ledger Key Ring secret, and calls the configured provider.
@@ -45,6 +45,16 @@ The listener is a background, read-only service. RPC failures do not block the H
 ### Frontend Web3 flow
 
 The root frontend page remains the original gate. The developer sandbox lives at `/sandbox` and uses Wagmi, Viem, React Query, and an injected wallet connector configured for local Anvil (`chainId 31337`). It simulates an incoming request, polls the pending queue, derives the contract `secretId`, computes the World ID signal bound to human/agent/secret, captures Face Auth proof, submits `authorizeAgent`, waits for the transaction receipt, and polls the backend listener result.
+
+### Sandbox diagnostics and proof formats
+
+The sandbox accepts both current and legacy IDKit response shapes:
+
+- v4 responses with an eight-element `proof` array and `nullifier`.
+- v3/legacy responses with an ABI-encoded proof string and `merkle_root`.
+- Legacy top-level payloads using `root`, `nullifier_hash`, and either an array or encoded proof.
+
+Proof normalization is guarded and logs the raw callback shape and normalization failures in the browser console. The `Authorization checks` panel beside the button shows the live status of the selected request, proof, wallet connection, wallet address, registry address, and `authorizationState`. The button is enabled from the request, proof, wallet, and registry prerequisites rather than from a transient state label; `authorizationState === proof_ready` remains visible as diagnostic state.
 
 ## Prerequisites
 
@@ -81,6 +91,8 @@ npm run dev
 
 The Next.js frontend listens on `http://localhost:3000` and calls `http://localhost:3001` through `NEXT_PUBLIC_BACKEND_URL`. Open `http://localhost:3000/sandbox` for the end-to-end developer dashboard.
 Set `NEXT_PUBLIC_RPC_URL` and `NEXT_PUBLIC_REGISTRY_ADDRESS` in `.env.local` to connect the wallet and submit registry transactions.
+
+When debugging a verification attempt, inspect the `[World ID] handleVerify`, `[World ID] onSuccess`, `[World ID] onError`, and proof-normalization logs in the browser console. A failed normalization clears the candidate proof and leaves the authorization button disabled instead of allowing a partial payload to reach the contract.
 
 ## Validation Commands
 
