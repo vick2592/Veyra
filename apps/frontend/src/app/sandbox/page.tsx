@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { keccak256, encodePacked, toBytes } from 'viem';
+import { decodeAbiParameters, keccak256, encodePacked, toBytes } from 'viem';
 import { useAccount, useConnect, useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
 import {
   IDKitRequestWidget,
@@ -64,40 +64,54 @@ async function fetchPendingRequests(signal?: AbortSignal): Promise<PendingReques
 }
 
 function getOnChainProof(result: IDKitResult): OnChainProof {
-  const legacyResult = result as IDKitResult & {
-    root?: string;
-    nullifier_hash?: string;
-    proof?: string[];
-  };
-  if (
-    legacyResult.root !== undefined &&
-    legacyResult.nullifier_hash !== undefined &&
-    legacyResult.proof !== undefined &&
-    legacyResult.proof.length === 8
-  ) {
-    return {
-      root: legacyResult.root,
-      nullifierHash: legacyResult.nullifier_hash,
-      proof: legacyResult.proof,
+  try {
+    const payload = result as IDKitResult & {
+      root?: string;
+      nullifier_hash?: string;
+      proof?: string[] | string;
     };
-  }
+    const response = result.responses[0] as {
+      root?: string;
+      merkle_root?: string;
+      nullifier_hash?: string;
+      nullifier?: string;
+      proof?: string[] | string;
+      session_nullifier?: string[];
+    } | undefined;
+    const candidate = payload.root !== undefined || payload.nullifier_hash !== undefined || payload.proof !== undefined
+      ? payload
+      : response;
+    const rawProof = candidate?.proof;
+    const proof = Array.isArray(rawProof)
+      ? rawProof
+      : typeof rawProof === 'string' && rawProof.trim().startsWith('[')
+        ? JSON.parse(rawProof) as unknown
+        : typeof rawProof === 'string'
+          ? decodeAbiParameters([{type: 'uint256[8]'}], rawProof as `0x${string}`)[0]
+          : undefined;
+    if (!Array.isArray(proof) || proof.length !== 8 || proof.some((value) => typeof value !== 'string' && typeof value !== 'bigint')) {
+      throw new Error(`World ID proof must contain exactly 8 values; received ${Array.isArray(proof) ? proof.length : typeof proof}.`);
+    }
 
-  const response = result.responses[0] as {
-    root?: string;
-    merkle_root?: string;
-    nullifier_hash?: string;
-    nullifier?: string;
-    proof?: string[];
-    session_nullifier?: string[];
-  } | undefined;
-  const proof = response?.proof;
-  const root = response?.root ?? response?.merkle_root ?? proof?.[4];
-  const nullifierHash = response?.nullifier_hash ?? response?.nullifier ?? response?.session_nullifier?.[0];
-  if (root === undefined || nullifierHash === undefined || proof === undefined || proof.length !== 8) {
-    throw new Error('World ID returned an incomplete on-chain proof.');
-  }
+    const root = candidate?.root ?? (candidate === response ? response?.merkle_root : undefined) ?? (proof[4] as string | bigint);
+    const nullifierHash = candidate?.nullifier_hash ?? (candidate === response ? response?.nullifier : undefined) ?? (candidate === response ? response?.session_nullifier?.[0] : undefined);
+    if (root === undefined || nullifierHash === undefined) {
+      throw new Error('World ID returned an incomplete on-chain proof.');
+    }
 
-  return {root, nullifierHash, proof};
+    return {
+      root: String(root),
+      nullifierHash: String(nullifierHash),
+      proof: proof.map((value) => String(value)),
+    };
+  } catch (error) {
+    console.error('[World ID] proof normalization failed', {
+      error,
+      result,
+      response: result.responses?.[0],
+    });
+    throw error instanceof Error ? error : new Error('World ID proof normalization failed.');
+  }
 }
 
 function getSecretId(secretIdentifier: string): `0x${string}` {
@@ -347,14 +361,21 @@ export default function SandboxPage() {
   const selectedRequest = pendingRequests.find((request) => request.requestId === selectedRequestId);
   const selectedSecretId = selectedSecretIdentifier === null ? null : getSecretId(selectedSecretIdentifier);
   const verificationLabel = verificationMode === 'selfie' ? 'Selfie Check' : 'Orb';
-  const canAuthorize = isMounted && 
-    selectedRequest !== undefined &&
-    selectedRequestId !== null &&
-    selectedSecretIdentifier !== null &&
-    worldIdProof !== null &&
-    isConnected &&
-    address !== undefined &&
-    registryAddress !== undefined;
+  const hasSelectedRequest = selectedRequest !== undefined;
+  const hasSelectedRequestId = selectedRequestId !== null;
+  const hasSelectedSecretIdentifier = selectedSecretIdentifier !== null;
+  const hasWorldIdProof = worldIdProof !== null;
+  const hasWalletConnection = isConnected;
+  const hasWalletAddress = address !== undefined;
+  const hasRegistryAddress = registryAddress !== undefined;
+  const hasProofReadyState = authorizationState === 'proof_ready';
+  const canAuthorize = hasSelectedRequest &&
+    hasSelectedRequestId &&
+    hasSelectedSecretIdentifier &&
+    hasWorldIdProof &&
+    hasWalletConnection &&
+    hasWalletAddress &&
+    hasRegistryAddress;
 
   return (
     <main className="min-h-screen px-5 py-6 sm:px-10 sm:py-10">
@@ -594,14 +615,35 @@ export default function SandboxPage() {
                 <span className="text-xs text-(--muted)">{address.slice(0, 6)}...{address.slice(-4)}</span>
               )}
               {isMounted && (
-                <button
-                  type="button"
-                  onClick={() => void handleAuthorizeOnChain()}
-                  disabled={!canAuthorize || isTransactionPending}
-                  className="min-w-56 rounded-full border border-(--ink) px-6 py-4 text-sm font-semibold text-(--ink) transition hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  {authorizationState === 'submitting_tx' ? 'Binding authorization...' : authorizationState === 'waiting_for_tx' ? 'Confirming registry...' : 'Authorize agent request'}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void handleAuthorizeOnChain()}
+                    disabled={!canAuthorize || isTransactionPending}
+                    className="min-w-56 rounded-full border border-(--ink) px-6 py-4 text-sm font-semibold text-(--ink) transition hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    {authorizationState === 'submitting_tx' ? 'Binding authorization...' : authorizationState === 'waiting_for_tx' ? 'Confirming registry...' : 'Authorize agent request'}
+                  </button>
+                  <div className="w-full rounded-2xl border border-(--line) bg-white/45 p-3 text-left text-xs text-(--muted)" aria-label="Authorization prerequisites">
+                    <p className="font-semibold uppercase tracking-[0.14em] text-(--ink)">Authorization checks</p>
+                    <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                      {[
+                        {label: 'selectedRequest', ready: hasSelectedRequest},
+                        {label: 'selectedRequestId', ready: hasSelectedRequestId},
+                        {label: 'selectedSecretIdentifier', ready: hasSelectedSecretIdentifier},
+                        {label: 'worldIdProof', ready: hasWorldIdProof},
+                        {label: 'isConnected', ready: hasWalletConnection},
+                        {label: 'address', ready: hasWalletAddress},
+                        {label: 'registryAddress', ready: hasRegistryAddress},
+                        {label: 'authorizationState === proof_ready', ready: hasProofReadyState},
+                      ].map(({label, ready}) => (
+                        <span key={label} className={ready ? 'text-[#28734a]' : 'text-[#a83f31]'}>
+                          {ready ? 'OK' : 'WAIT'} {label}: {String(ready)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -633,17 +675,45 @@ export default function SandboxPage() {
                     })
               }
               handleVerify={async (result: IDKitResult) => {
-                proofCandidate.current = getOnChainProof(result);
-                setMessage('Proof received. Completing World ID verification...');
+                console.log('[World ID] handleVerify received raw payload', {
+                  result,
+                  protocolVersion: result.protocol_version,
+                  responseCount: result.responses?.length ?? 0,
+                  responseKeys: Object.keys(result.responses?.[0] ?? {}),
+                  proofType: typeof (result.responses?.[0] as {proof?: unknown} | undefined)?.proof,
+                  proofLength: Array.isArray((result.responses?.[0] as {proof?: unknown} | undefined)?.proof)
+                    ? ((result.responses?.[0] as {proof?: unknown[]} | undefined)?.proof?.length ?? 0)
+                    : undefined,
+                });
+                try {
+                  proofCandidate.current = getOnChainProof(result);
+                  setAuthorizationState('proof_ready');
+                  setMessage('Proof received. Completing World ID verification...');
+                  console.log('[World ID] handleVerify normalized proof', proofCandidate.current);
+                } catch (error) {
+                  proofCandidate.current = null;
+                  setWorldIdProof(null);
+                  setAuthorizationState('error');
+                  setRpContext(null);
+                  setWidgetOpen(false);
+                  setMessage(error instanceof Error ? error.message : 'World ID proof could not be normalized.');
+                  console.error('[World ID] handleVerify rejected payload', {error, result});
+                }
               }}
-              onSuccess={() => {
+              onSuccess={(result: IDKitResult) => {
+                console.log('[World ID] onSuccess received callback payload', {
+                  result,
+                  protocolVersion: result.protocol_version,
+                  responseCount: result.responses?.length ?? 0,
+                });
                 const proof = proofCandidate.current;
                 if (proof === null) {
                   setAuthorizationState('error');
                   setMessage('World ID completed without an on-chain proof.');
+                  console.error('[World ID] onSuccess had no normalized proof candidate');
                   return;
                 }
-                console.log("Captured World ID Proof:", proof);
+                console.log('[World ID] onSuccess using normalized proof', proof);
                 setWorldIdProof({
                   root: proof.root,
                   nullifierHash: proof.nullifierHash,
@@ -655,6 +725,11 @@ export default function SandboxPage() {
                 setMessage('World ID proof captured and ready for authorization.');
               }}
               onError={(errorCode: string) => {
+                console.error('[World ID] onError received callback error', {
+                  errorCode,
+                  proofCandidate: proofCandidate.current,
+                  authorizationState,
+                });
                 proofCandidate.current = null;
                 setWorldIdProof(null);
                 setAuthorizationState('error');
