@@ -1,6 +1,21 @@
 @import "tailwindcss";
 
 :root {
+  /* Token names mirror the Figma variable panel 1:1 (Purple/purple-500 etc.)
+     so future pulls from the design file stay a direct lookup, not a translation. */
+  --dark-500: #040813; /* hero-panel background only, never the page base */
+  --dark-400: #363942; /* primary text on light surfaces */
+  --dark-300: #575a61; /* secondary/muted text */
+  --dark-100: #b1b2b6; /* placeholder / disabled text */
+  --dark-50: #e6e6e7; /* borders, dividers */
+  --purple-500: #7a5dff; /* primary accent */
+  --blue-500: #0033ff; /* secondary accent, headline color */
+  --creame: #f9faff; /* page base */
+
+  /* Legacy tokens — /sandbox only (dev/diagnostic tool, kept out of the
+     Figma-driven restyle on purpose). Sandbox's own root sets its background
+     and font inline now, decoupled from body below, but its internal
+     Tailwind classes still reference these var names directly. */
   --ink: #17211b;
   --muted: #66746a;
   --paper: #f4f1e8;
@@ -20,9 +35,7 @@ body {
 
 body {
   margin: 0;
-  background:
-    radial-gradient(circle at 12% 12%, rgba(183, 228, 199, 0.72), transparent 28rem),
-    linear-gradient(135deg, #f7f3e9 0%, var(--paper) 52%, #dcebdc 100%);
-  color: var(--ink);
-  font-family: Georgia, 'Times New Roman', serif;
+  background: var(--creame);
+  color: var(--dark-400);
+  font-family: var(--font-host-grotesk), 'Host Grotesk', ui-sans-serif, system-ui, sans-serif;
 }

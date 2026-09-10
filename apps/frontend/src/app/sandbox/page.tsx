@@ -518,7 +518,15 @@ export default function SandboxPage() {
   }, [idKitErrorCode, isIdKitError, resetIdKit]);
 
   return (
-    <main className="min-h-screen px-5 py-6 sm:px-10 sm:py-10">
+    <main
+      className="min-h-screen px-5 py-6 sm:px-10 sm:py-10"
+      style={{
+        background:
+          'radial-gradient(circle at 12% 12%, rgba(183, 228, 199, 0.72), transparent 28rem), linear-gradient(135deg, #f7f3e9 0%, #f4f1e8 52%, #dcebdc 100%)',
+        color: '#17211b',
+        fontFamily: "Georgia, 'Times New Roman', serif",
+      }}
+    >
       <div className="mx-auto min-h-[calc(100vh-3rem)] max-w-6xl rounded-4xl border border-(--line) bg-[rgba(255,253,246,0.66)] p-6 shadow-[0_24px_80px_rgba(23,33,27,0.12)] backdrop-blur sm:min-h-[calc(100vh-5rem)] sm:p-10">
         <header className="flex items-center justify-between border-b border-(--line) pb-5">
           <div className="flex items-center gap-3 text-sm font-semibold uppercase tracking-[0.2em]">
