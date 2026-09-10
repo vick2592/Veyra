@@ -12,6 +12,7 @@ import {
 
 type SimulatorState = 'idle' | 'submitting' | 'accepted' | 'error';
 type AuthorizationState = 'idle' | 'preparing_rp' | 'idkit_open' | 'proof_ready' | 'submitting_tx' | 'waiting_for_tx' | 'polling_execution' | 'success' | 'error';
+type VerificationMode = 'selfie' | 'orb';
 
 type PendingRequest = {
   requestId: string;
@@ -81,14 +82,16 @@ function getOnChainProof(result: IDKitResult): OnChainProof {
   }
 
   const response = result.responses[0] as {
+    root?: string;
     merkle_root?: string;
+    nullifier_hash?: string;
     nullifier?: string;
     proof?: string[];
     session_nullifier?: string[];
   } | undefined;
   const proof = response?.proof;
-  const root = response?.merkle_root ?? proof?.[4];
-  const nullifierHash = response?.nullifier ?? response?.session_nullifier?.[0];
+  const root = response?.root ?? response?.merkle_root ?? proof?.[4];
+  const nullifierHash = response?.nullifier_hash ?? response?.nullifier ?? response?.session_nullifier?.[0];
   if (root === undefined || nullifierHash === undefined || proof === undefined || proof.length !== 8) {
     throw new Error('World ID returned an incomplete on-chain proof.');
   }
@@ -119,6 +122,7 @@ export default function SandboxPage() {
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [selectedSecretIdentifier, setSelectedSecretIdentifier] = useState<string | null>(null);
+  const [verificationMode, setVerificationMode] = useState<VerificationMode>('selfie');
   const [authorizationState, setAuthorizationState] = useState<AuthorizationState>('idle');
   const [rpContext, setRpContext] = useState<RpContext | null>(null);
   const [widgetOpen, setWidgetOpen] = useState(false);
@@ -341,6 +345,7 @@ export default function SandboxPage() {
   const isSubmitting = simulatorState === 'submitting';
   const selectedRequest = pendingRequests.find((request) => request.requestId === selectedRequestId);
   const selectedSecretId = selectedSecretIdentifier === null ? null : getSecretId(selectedSecretIdentifier);
+  const verificationLabel = verificationMode === 'selfie' ? 'Selfie Check' : 'Orb';
   const canAuthorize = isMounted && 
     selectedRequest !== undefined &&
     selectedRequestId !== null &&
@@ -469,18 +474,48 @@ export default function SandboxPage() {
         <section className="mt-6 border-t border-(--line) pt-6" aria-live="polite">
           <div className="grid gap-6 sm:grid-cols-[1fr_auto] sm:items-end">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-(--muted)">Selfie Check liveness gate</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-(--muted)">{verificationLabel} verification gate</p>
               <p className="mt-2 text-2xl">
                 {selectedRequest === undefined ? 'Select an agent request to begin.' : selectedSecretIdentifier}
               </p>
               <p className="mt-2 max-w-xl text-sm leading-6 text-(--muted)">
                 {worldIdProof !== null
                   ? 'Liveness proof captured. The registry can now bind this human, agent, key identifier, and request before execution.'
-                  : 'Selfie Check confirms a live human is present. The selected request determines the signed World ID action and the key authorization scope.'}
+                  : verificationMode === 'selfie'
+                    ? 'Selfie Check confirms a live human is present. The selected request determines the signed World ID action and the key authorization scope.'
+                    : 'Orb verification confirms a World ID proof. The selected request determines the signed World ID action and the key authorization scope.'}
               </p>
             </div>
 
             <div className="flex flex-col items-stretch gap-3 sm:items-end">
+              <fieldset className="flex rounded-full border border-(--line) bg-white/55 p-1 text-sm" aria-label="Verification mode">
+                <legend className="sr-only">Verification mode</legend>
+                {(['selfie', 'orb'] as const).map((mode) => {
+                  const isSelected = verificationMode === mode;
+                  const label = mode === 'selfie' ? 'Selfie Check' : 'Orb';
+                  return (
+                    <label key={mode} className={`cursor-pointer rounded-full px-4 py-2 transition ${isSelected ? 'bg-(--ink) text-white' : 'text-(--muted) hover:text-(--ink)'}`}>
+                      <input
+                        type="radio"
+                        name="verification-mode"
+                        value={mode}
+                        checked={isSelected}
+                        onChange={() => {
+                          setVerificationMode(mode);
+                          setWorldIdProof(null);
+                          proofCandidate.current = null;
+                          setRpContext(null);
+                          setWidgetOpen(false);
+                          setAuthorizationState('idle');
+                          setMessage(`${mode === 'selfie' ? 'Selfie Check' : 'Orb'} mode selected.`);
+                        }}
+                        className="sr-only"
+                      />
+                      {label}
+                    </label>
+                  );
+                })}
+              </fieldset>
               {!isMounted ? (
                 <div className="h-13 min-w-56 animate-pulse rounded-full border border-(--line) bg-white/55" aria-label="Loading wallet controls" />
               ) : !isConnected ? (
@@ -498,7 +533,7 @@ export default function SandboxPage() {
                   onClick={async () => {
                     if (selectedRequest === undefined || address === undefined) {
                       setAuthorizationState('error');
-                      setMessage('Select a request and connect a wallet before starting Selfie Check.');
+                      setMessage(`Select a request and connect a wallet before starting ${verificationLabel}.`);
                       return;
                     }
 
@@ -542,7 +577,7 @@ export default function SandboxPage() {
                       });
                       setWidgetOpen(true);
                       setAuthorizationState('idkit_open');
-                      setMessage('Complete the World ID Selfie Check to prove a live human is authorizing this agent request.');
+                      setMessage(`Complete ${verificationLabel} to prove a live human is authorizing this agent request.`);
                     } catch (error) {
                       setAuthorizationState('error');
                       setMessage(error instanceof Error ? error.message : 'World ID authorization could not start.');
@@ -551,7 +586,7 @@ export default function SandboxPage() {
                   disabled={selectedRequest === undefined || authorizationState === 'preparing_rp' || worldAppId.length === 0 || worldRpId.length === 0}
                   className="min-w-56 rounded-full bg-(--ink) px-6 py-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#2a3a2f] disabled:cursor-not-allowed disabled:opacity-45"
                 >
-                  {authorizationState === 'preparing_rp' ? 'Preparing Selfie Check...' : 'Start Selfie Check'}
+                  {authorizationState === 'preparing_rp' ? `Preparing ${verificationLabel}...` : `Start ${verificationLabel}`}
                 </button>
               )}
               {isMounted && isConnected && address !== undefined && (
@@ -579,13 +614,26 @@ export default function SandboxPage() {
               rp_context={rpContext}
               environment="staging"
               allow_legacy_proofs={true}
-              preset={selfieCheckLegacy({
-                signal: getWorldIdSignal(
-                  address,
-                  selectedRequest.agentAddress as `0x${string}`,
-                  getSecretId(selectedRequest.secretIdentifier),
-                ),
-              })}
+              {...(verificationMode === 'selfie'
+                ? {
+                    preset: selfieCheckLegacy({
+                      signal: getWorldIdSignal(
+                        address,
+                        selectedRequest.agentAddress as `0x${string}`,
+                        getSecretId(selectedRequest.secretIdentifier),
+                      ),
+                    }),
+                  }
+                : {
+                    constraints: {
+                      type: 'proof_of_human' as const,
+                      signal: getWorldIdSignal(
+                        address,
+                        selectedRequest.agentAddress as `0x${string}`,
+                        getSecretId(selectedRequest.secretIdentifier),
+                      ),
+                    },
+                  })}
               handleVerify={async (result: IDKitResult) => {
                 proofCandidate.current = getOnChainProof(result);
                 setMessage('Proof received. Completing World ID verification...');
