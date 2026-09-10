@@ -1,8 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useAccount, useConnect } from 'wagmi';
+import {
+  IDKitRequestWidget,
+  selfieCheckLegacy,
+  type IDKitResult,
+  type RpContext,
+} from '@worldcoin/idkit';
 
 type SimulatorState = 'idle' | 'submitting' | 'accepted' | 'error';
+type AuthorizationState = 'idle' | 'preparing_rp' | 'idkit_open' | 'proof_ready' | 'error';
 
 type PendingRequest = {
   requestId: string;
@@ -14,7 +22,15 @@ type PendingRequest = {
   expiresAt: string;
 };
 
+type OnChainProof = {
+  root: string;
+  nullifierHash: string;
+  proof: string[];
+};
+
 const backendUrl = 'http://localhost:3001';
+const worldAppId = process.env.NEXT_PUBLIC_WORLD_ID_APP_ID ?? '';
+const worldRpId = process.env.NEXT_PUBLIC_WORLD_ID_RP_ID ?? '';
 const dummyAgentAddress = '0x0000000000000000000000000000000000000001';
 
 async function fetchPendingRequests(signal?: AbortSignal): Promise<PendingRequest[]> {
@@ -26,12 +42,54 @@ async function fetchPendingRequests(signal?: AbortSignal): Promise<PendingReques
   return body.requests ?? [];
 }
 
+function getOnChainProof(result: IDKitResult): OnChainProof {
+  const legacyResult = result as IDKitResult & {
+    root?: string;
+    nullifier_hash?: string;
+    proof?: string[];
+  };
+  if (
+    legacyResult.root !== undefined &&
+    legacyResult.nullifier_hash !== undefined &&
+    legacyResult.proof !== undefined &&
+    legacyResult.proof.length === 8
+  ) {
+    return {
+      root: legacyResult.root,
+      nullifierHash: legacyResult.nullifier_hash,
+      proof: legacyResult.proof,
+    };
+  }
+
+  const response = result.responses[0] as {
+    merkle_root?: string;
+    nullifier?: string;
+    proof?: string[];
+    session_nullifier?: string[];
+  } | undefined;
+  const proof = response?.proof;
+  const root = response?.merkle_root ?? proof?.[4];
+  const nullifierHash = response?.nullifier ?? response?.session_nullifier?.[0];
+  if (root === undefined || nullifierHash === undefined || proof === undefined || proof.length !== 8) {
+    throw new Error('World ID returned an incomplete on-chain proof.');
+  }
+
+  return {root, nullifierHash, proof};
+}
+
 export default function SandboxPage() {
   const [simulatorState, setSimulatorState] = useState<SimulatorState>('idle');
   const [message, setMessage] = useState('');
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [selectedSecretIdentifier, setSelectedSecretIdentifier] = useState<string | null>(null);
+  const [authorizationState, setAuthorizationState] = useState<AuthorizationState>('idle');
+  const [rpContext, setRpContext] = useState<RpContext | null>(null);
+  const [widgetOpen, setWidgetOpen] = useState(false);
+  const [worldIdProof, setWorldIdProof] = useState<OnChainProof | null>(null);
+  const proofCandidate = useRef<OnChainProof | null>(null);
+  const {address, isConnected} = useAccount();
+  const {connect, connectors} = useConnect();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -195,6 +253,11 @@ export default function SandboxPage() {
                   onClick={() => {
                     setSelectedRequestId(request.requestId);
                     setSelectedSecretIdentifier(request.secretIdentifier);
+                    setAuthorizationState('idle');
+                    setRpContext(null);
+                    setWidgetOpen(false);
+                    setWorldIdProof(null);
+                    proofCandidate.current = null;
                     setMessage(`Selected ${request.secretIdentifier} for authorization.`);
                   }}
                   className={`grid gap-3 rounded-2xl border px-4 py-4 text-left transition sm:grid-cols-[1fr_auto] sm:items-center ${isSelected ? 'border-(--ink) bg-white' : 'border-(--line) bg-white/45 hover:bg-white'}`}
@@ -217,6 +280,137 @@ export default function SandboxPage() {
             <p className="mt-4 text-sm text-(--muted)">
               Selected target: <strong className="font-semibold text-(--ink)">{selectedSecretIdentifier}</strong>
             </p>
+          )}
+        </section>
+
+        <section className="mt-6 border-t border-(--line) pt-6" aria-live="polite">
+          <div className="grid gap-6 sm:grid-cols-[1fr_auto] sm:items-end">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-(--muted)">World ID Face Auth</p>
+              <p className="mt-2 text-2xl">
+                {selectedRequest === undefined ? 'Select a request to begin.' : selectedSecretIdentifier}
+              </p>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-(--muted)">
+                {worldIdProof !== null
+                  ? 'Proof captured. On-chain authorization will be available in the next stage.'
+                  : 'The selected request determines the signed World ID action.'}
+              </p>
+            </div>
+
+            <div className="flex flex-col items-stretch gap-3 sm:items-end">
+              {!isConnected ? (
+                <button
+                  type="button"
+                  onClick={() => connectors[0] !== undefined && connect({connector: connectors[0]})}
+                  disabled={connectors[0] === undefined}
+                  className="min-w-56 rounded-full border border-(--ink) px-6 py-4 text-sm font-semibold text-(--ink) transition hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  Connect wallet for Face Auth
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (selectedRequest === undefined || address === undefined) {
+                      setAuthorizationState('error');
+                      setMessage('Select a request and connect a wallet before starting Face Auth.');
+                      return;
+                    }
+
+                    setAuthorizationState('preparing_rp');
+                    setWorldIdProof(null);
+                    proofCandidate.current = null;
+                    setMessage('Preparing a signed World ID request...');
+                    try {
+                      const response = await fetch(`${backendUrl}/api/world-id/sign`, {
+                        method: 'POST',
+                        headers: {'content-type': 'application/json'},
+                        body: JSON.stringify({action: selectedRequest.secretIdentifier}),
+                      });
+                      const body = await response.json().catch(() => null) as {
+                        error?: string;
+                        rp_id?: string;
+                        nonce?: string;
+                        created_at?: number;
+                        expires_at?: number;
+                        signature?: string;
+                      } | null;
+                      if (!response.ok) {
+                        throw new Error(body?.error ?? 'The broker could not prepare World ID authorization.');
+                      }
+                      if (
+                        body?.rp_id === undefined ||
+                        body.nonce === undefined ||
+                        body.created_at === undefined ||
+                        body.expires_at === undefined ||
+                        body.signature === undefined
+                      ) {
+                        throw new Error('The broker returned an incomplete RP context.');
+                      }
+
+                      setRpContext({
+                        rp_id: body.rp_id,
+                        nonce: body.nonce,
+                        created_at: body.created_at,
+                        expires_at: body.expires_at,
+                        signature: body.signature,
+                      });
+                      setWidgetOpen(true);
+                      setAuthorizationState('idkit_open');
+                      setMessage('Complete the World ID Selfie Check to continue.');
+                    } catch (error) {
+                      setAuthorizationState('error');
+                      setMessage(error instanceof Error ? error.message : 'World ID authorization could not start.');
+                    }
+                  }}
+                  disabled={selectedRequest === undefined || authorizationState === 'preparing_rp' || worldAppId.length === 0 || worldRpId.length === 0}
+                  className="min-w-56 rounded-full bg-(--ink) px-6 py-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#2a3a2f] disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  {authorizationState === 'preparing_rp' ? 'Preparing Face Auth...' : 'Start Face Auth'}
+                </button>
+              )}
+              {isConnected && address !== undefined && (
+                <span className="text-xs text-(--muted)">{address.slice(0, 6)}...{address.slice(-4)}</span>
+              )}
+            </div>
+          </div>
+
+          {rpContext !== null && selectedRequest !== undefined && address !== undefined && (
+            <IDKitRequestWidget
+              open={widgetOpen}
+              onOpenChange={setWidgetOpen}
+              app_id={worldAppId as `app_${string}`}
+              action={selectedRequest.secretIdentifier}
+              rp_context={rpContext}
+              environment="staging"
+              allow_legacy_proofs={true}
+              preset={selfieCheckLegacy({signal: address})}
+              handleVerify={async (result: IDKitResult) => {
+                proofCandidate.current = getOnChainProof(result);
+                setMessage('Proof received. Completing World ID verification...');
+              }}
+              onSuccess={() => {
+                if (proofCandidate.current === null) {
+                  setAuthorizationState('error');
+                  setMessage('World ID completed without an on-chain proof.');
+                  return;
+                }
+                setWorldIdProof(proofCandidate.current);
+                setAuthorizationState('proof_ready');
+                setRpContext(null);
+                setWidgetOpen(false);
+                setMessage('World ID proof captured and ready for authorization.');
+              }}
+              onError={(errorCode: string) => {
+                proofCandidate.current = null;
+                setWorldIdProof(null);
+                setAuthorizationState('error');
+                setRpContext(null);
+                setWidgetOpen(false);
+                setMessage(`World ID verification failed: ${errorCode}.`);
+              }}
+              autoClose
+            />
           )}
         </section>
       </div>
