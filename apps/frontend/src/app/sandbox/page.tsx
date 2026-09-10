@@ -341,15 +341,14 @@ export default function SandboxPage() {
   const isSubmitting = simulatorState === 'submitting';
   const selectedRequest = pendingRequests.find((request) => request.requestId === selectedRequestId);
   const selectedSecretId = selectedSecretIdentifier === null ? null : getSecretId(selectedSecretIdentifier);
-  const canAuthorize = isMounted && selectedRequest !== undefined &&
+  const canAuthorize = isMounted && 
+    selectedRequest !== undefined &&
     selectedRequestId !== null &&
     selectedSecretIdentifier !== null &&
-    selectedSecretId !== null &&
     worldIdProof !== null &&
     isConnected &&
     address !== undefined &&
-    registryAddress !== undefined &&
-    authorizationState === 'proof_ready';
+    registryAddress !== undefined;
 
   return (
     <main className="min-h-screen px-5 py-6 sm:px-10 sm:py-10">
@@ -366,16 +365,16 @@ export default function SandboxPage() {
           <div>
             <p className="mb-5 text-sm font-semibold uppercase tracking-[0.2em] text-(--muted)">Agent request simulator</p>
             <h1 className="max-w-3xl text-5xl leading-[0.96] tracking-[-0.03em] sm:text-7xl">
-              Put a request in the gate.
+              Put an agent request through the human gate.
             </h1>
             <p className="mt-7 max-w-xl text-lg leading-8 text-(--muted) sm:text-xl">
-              Create a local paid request for the human authorization flow. Queue selection and World ID authorization will appear here next.
+              An AI agent can request a capability, but it cannot authorize access to a sensitive key by itself. Selfie Check provides the anti-bot liveness and abuse-prevention gate before a human can authorize that request.
             </p>
           </div>
 
           <div className="border-l border-(--line) pl-6 lg:mb-1">
             <p className="text-sm leading-6 text-(--muted)">
-              This sandbox targets the allowlisted <strong className="font-semibold text-(--ink)">openai-key</strong> identifier and uses a local mock payment reference.
+              This sandbox targets the allowlisted <strong className="font-semibold text-(--ink)">openai-key</strong> identifier. Its payment reference is local mock data, not production Bazantic settlement.
             </p>
           </div>
         </section>
@@ -386,7 +385,7 @@ export default function SandboxPage() {
               <p className="text-sm font-semibold uppercase tracking-[0.16em] text-(--muted)">Incoming agent request</p>
               <p className="mt-2 text-2xl">Execute capability with openai-key</p>
               <p className="mt-2 max-w-xl text-sm leading-6 text-(--muted)">
-                The simulator sends the request to the local Bazantic endpoint with a fresh idempotency key.
+                The simulator sends a local mock-paid request to the broker with a fresh idempotency key. The request waits for human authorization before execution.
               </p>
               {message && (
                 <p className={`mt-4 max-w-xl text-sm ${simulatorState === 'error' ? 'text-[#a83f31]' : simulatorState === 'accepted' ? 'text-[#28734a]' : 'text-(--muted)'}`}>
@@ -411,7 +410,7 @@ export default function SandboxPage() {
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.16em] text-(--muted)">Pending queue</p>
               <p className="mt-2 text-sm leading-6 text-(--muted)">
-                Select an active request to prepare it for human authorization.
+                Select an active agent request to bind it to a human authorization attempt before it expires.
               </p>
             </div>
             <span className="text-xs uppercase tracking-[0.14em] text-(--muted)">
@@ -422,7 +421,7 @@ export default function SandboxPage() {
           <div className="mt-4 grid gap-3">
             {pendingRequests.length === 0 ? (
               <p className="rounded-2xl border border-dashed border-(--line) px-4 py-5 text-sm text-(--muted)">
-                No active requests. Simulate an agent request to populate the queue.
+                No active requests. Simulate an agent request to place one in the human authorization queue.
               </p>
             ) : pendingRequests.map((request) => {
               const isSelected = request.requestId === selectedRequestId;
@@ -470,14 +469,14 @@ export default function SandboxPage() {
         <section className="mt-6 border-t border-(--line) pt-6" aria-live="polite">
           <div className="grid gap-6 sm:grid-cols-[1fr_auto] sm:items-end">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-(--muted)">World ID Face Auth</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-(--muted)">Selfie Check liveness gate</p>
               <p className="mt-2 text-2xl">
-                {selectedRequest === undefined ? 'Select a request to begin.' : selectedSecretIdentifier}
+                {selectedRequest === undefined ? 'Select an agent request to begin.' : selectedSecretIdentifier}
               </p>
               <p className="mt-2 max-w-xl text-sm leading-6 text-(--muted)">
                 {worldIdProof !== null
-                  ? 'Proof captured. Submit the selected request for on-chain authorization.'
-                  : 'The selected request determines the signed World ID action.'}
+                  ? 'Liveness proof captured. The registry can now bind this human, agent, key identifier, and request before execution.'
+                  : 'Selfie Check confirms a live human is present. The selected request determines the signed World ID action and the key authorization scope.'}
               </p>
             </div>
 
@@ -491,7 +490,7 @@ export default function SandboxPage() {
                   disabled={connectors[0] === undefined}
                   className="min-w-56 rounded-full border border-(--ink) px-6 py-4 text-sm font-semibold text-(--ink) transition hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
                 >
-                  Connect wallet for Face Auth
+                  Connect wallet to bind authorization
                 </button>
               ) : (
                 <button
@@ -499,7 +498,7 @@ export default function SandboxPage() {
                   onClick={async () => {
                     if (selectedRequest === undefined || address === undefined) {
                       setAuthorizationState('error');
-                      setMessage('Select a request and connect a wallet before starting Face Auth.');
+                      setMessage('Select a request and connect a wallet before starting Selfie Check.');
                       return;
                     }
 
@@ -543,7 +542,7 @@ export default function SandboxPage() {
                       });
                       setWidgetOpen(true);
                       setAuthorizationState('idkit_open');
-                      setMessage('Complete the World ID Selfie Check to continue.');
+                      setMessage('Complete the World ID Selfie Check to prove a live human is authorizing this agent request.');
                     } catch (error) {
                       setAuthorizationState('error');
                       setMessage(error instanceof Error ? error.message : 'World ID authorization could not start.');
@@ -552,7 +551,7 @@ export default function SandboxPage() {
                   disabled={selectedRequest === undefined || authorizationState === 'preparing_rp' || worldAppId.length === 0 || worldRpId.length === 0}
                   className="min-w-56 rounded-full bg-(--ink) px-6 py-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#2a3a2f] disabled:cursor-not-allowed disabled:opacity-45"
                 >
-                  {authorizationState === 'preparing_rp' ? 'Preparing Face Auth...' : 'Start Face Auth'}
+                  {authorizationState === 'preparing_rp' ? 'Preparing Selfie Check...' : 'Start Selfie Check'}
                 </button>
               )}
               {isMounted && isConnected && address !== undefined && (
@@ -565,7 +564,7 @@ export default function SandboxPage() {
                   disabled={!canAuthorize || isTransactionPending}
                   className="min-w-56 rounded-full border border-(--ink) px-6 py-4 text-sm font-semibold text-(--ink) transition hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
                 >
-                  {authorizationState === 'submitting_tx' ? 'Submitting...' : authorizationState === 'waiting_for_tx' ? 'Confirming...' : 'Authorize Agent'}
+                  {authorizationState === 'submitting_tx' ? 'Binding authorization...' : authorizationState === 'waiting_for_tx' ? 'Confirming registry...' : 'Authorize agent request'}
                 </button>
               )}
             </div>
@@ -627,7 +626,7 @@ export default function SandboxPage() {
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.16em] text-(--muted)">Execution feedback</p>
               <p className="mt-2 text-2xl">
-                {authorizationState === 'success' ? 'Capability complete.' : executionStatus === 'executing' ? 'Listener is executing.' : 'Awaiting authorization.'}
+                {authorizationState === 'success' ? 'Capability complete.' : executionStatus === 'executing' ? 'Authorized request is executing.' : 'Awaiting human authorization.'}
               </p>
               {authorizationTxHash !== null && (
                 <p className="mt-3 break-all text-xs leading-5 text-(--muted)">
@@ -648,7 +647,7 @@ export default function SandboxPage() {
                 </pre>
               ) : (
                 <p className="text-sm leading-6 text-(--muted)">
-                  The backend result will appear here after the confirmed authorization event reaches the chain listener.
+                  After the registry confirms the human authorization event, the chain listener executes the scoped capability and returns a sanitized result here.
                 </p>
               )}
             </div>
