@@ -2,7 +2,7 @@
 
 > Secure AI agent infrastructure gated by World ID Face Auth and Ledger Key Ring custody.
 
-Veyra is a capability broker that lets an AI agent request sensitive work without holding raw API keys. A human completes World ID Face Auth before the broker verifies the proof, retrieves an allowlisted secret through Ledger Key Ring, and performs the agent-provider request.
+Veyra is a capability broker that lets an AI agent request sensitive work without holding raw API keys. A human completes World ID Face Auth before the broker verifies the proof, retrieves an allowlisted secret through Ledger Key Ring, and performs the agent-provider request. The `/sandbox` frontend route provides a complete local developer workflow for testing this sequence.
 
 ## Status
 
@@ -21,20 +21,22 @@ blockchain/  Web3 packages, contracts, and tooling
 
 1. An agent submits a paid request to `POST /api/bazantic/requests` with an idempotency key.
 2. The Bazantic adapter validates the request and payment headers before placing it in the ephemeral `pending_human_auth` Map queue.
-3. The endpoint returns `202` with a `requestId`; the frontend polls `GET /api/bazantic/pending` and lets the human select a request.
-4. The frontend requests a short-lived RP signature from `POST /api/world-id/sign`, opens `IDKitRequestWidget`, and submits the World ID proof through `VeyraRegistry.authorizeAgent` with the selected request ID.
-5. The registry verifies the proof and emits `AgentAuthorized(..., requestId)`.
-6. The chain listener waits for confirmations, claims the matching queued request, decrypts the allowlisted Ledger Key Ring secret, and calls the configured provider.
-7. The agent polls `GET /api/bazantic/requests/:requestId` for `completed` or `failed` and receives only the final result or a sanitized error.
+3. The endpoint returns `202` with a `requestId`; the sandbox polls `GET /api/bazantic/pending` every three seconds and lets the human select a request.
+4. The sandbox requests a short-lived RP signature from `POST /api/world-id/sign`, opens `IDKitRequestWidget` with `selfieCheckLegacy`, and stores the normalized World ID proof.
+5. After proof capture, the sandbox submits the selected agent, hashed secret ID, proof, and request ID through `VeyraRegistry.authorizeAgent`.
+6. The registry verifies the proof and emits `AgentAuthorized` with the hashed secret ID, nullifier, request ID, and timestamp.
+7. The chain listener waits for confirmations, claims the matching queued request, decrypts the allowlisted Ledger Key Ring secret, and calls the configured provider.
+8. After the authorization transaction is confirmed, the sandbox polls `GET /api/bazantic/requests/:requestId` every three seconds for `completed` or `failed` and displays the final result or sanitized error.
 
 Bazantic's hosted gateway is the production payment boundary: submit `docs/veyra-bazantic-openapi.yaml` (or the deployed API URL) through the Bazantic provider flow and let Bazantic generate the agent-facing gateway, MCP surface, and x402/MPP payment handling. The local `services/bazantic.ts` adapter remains useful for direct/local testing, but it is not a replacement for Bazantic's hosted settlement service.
 
 ### Decentralized authorization flow
 
-1. `blockchain/packages/contracts/src/VeyraRegistry.sol` stores Ledger Key Ring identifiers, never plaintext secrets.
-2. A user can register an identifier with `registerSecret` and submit a World ID proof through `authorizeAgent`.
-3. The registry verifies the proof against its constructor-fixed World ID group and external nullifier, then records the nullifier so the proof cannot be replayed.
-5. A successful authorization emits `AgentAuthorized` with the request ID.
+1. `blockchain/packages/contracts/src/VeyraRegistry.sol` stores encrypted user metadata and secret ciphertext, never plaintext API keys.
+2. A registered user stores a secret under a `bytes32 secretId`; the frontend derives this ID from the selected identifier before authorization.
+3. `authorizeAgent(address agentAddress, bytes32 secretId, uint256 root, uint256 nullifierHash, uint256[8] proof, bytes32 requestId)` verifies the World ID proof, checks the secret is active, checks the audit registry has not revoked the agent, and records the nullifier.
+4. The World ID signal binds the human wallet, selected agent address, and hashed secret ID. This prevents reusing a proof for a different agent or secret.
+5. A successful authorization emits `AgentAuthorized(user, agent, secretId, nullifierHash, requestId, authorizedAt)`.
 6. The backend listener watches only the configured registry address, waits for the configured confirmation depth, claims the matching in-memory request, and passes its identifier through the shared agent execution path.
 7. The listener uses the existing allowlisted Ledger Key Ring decryption flow and calls the configured agent provider without logging or persisting the plaintext API key.
 
@@ -42,7 +44,7 @@ The listener is a background, read-only service. RPC failures do not block the H
 
 ### Frontend Web3 flow
 
-The frontend uses Wagmi, Viem, and React Query with an injected wallet connector configured for local Anvil (`chainId 31337`). After IDKit returns a proof, it converts the proof values to `uint256` arguments and submits `authorizeAgent` to the configured registry address. The wallet address is used as both the agent address and the World ID signal.
+The root frontend page remains the original gate. The developer sandbox lives at `/sandbox` and uses Wagmi, Viem, React Query, and an injected wallet connector configured for local Anvil (`chainId 31337`). It simulates an incoming request, polls the pending queue, derives the contract `secretId`, computes the World ID signal bound to human/agent/secret, captures Face Auth proof, submits `authorizeAgent`, waits for the transaction receipt, and polls the backend listener result.
 
 ## Prerequisites
 
@@ -77,7 +79,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-The Next.js frontend listens on `http://localhost:3000` and calls `http://localhost:3001` through `NEXT_PUBLIC_BACKEND_URL`.
+The Next.js frontend listens on `http://localhost:3000` and calls `http://localhost:3001` through `NEXT_PUBLIC_BACKEND_URL`. Open `http://localhost:3000/sandbox` for the end-to-end developer dashboard.
 Set `NEXT_PUBLIC_RPC_URL` and `NEXT_PUBLIC_REGISTRY_ADDRESS` in `.env.local` to connect the wallet and submit registry transactions.
 
 ## Validation Commands
@@ -105,13 +107,15 @@ export DEPLOYER_PRIVATE_KEY=<funded-anvil-private-key>
 export WORLD_ID_ADDRESS=0x0000000000000000000000000000000000000001
 export WORLD_ID_GROUP_ID=1
 export WORLD_ID_EXTERNAL_NULLIFIER_HASH=$(cast keccak "veyra-local")
+# Optional: the script deploys CapabilityRegistry automatically when omitted.
+export EMITTER_ADDRESS=<audit-emitter-address>
 
 forge script script/DeployVeyraRegistry.s.sol:DeployVeyraRegistry \
 	--rpc-url http://127.0.0.1:8545 \
 	--broadcast
 ```
 
-The placeholder World ID address is deployment-only and cannot verify real proofs. A real World ID verifier address and matching external nullifier configuration are required outside local Anvil. The deployment script is `blockchain/packages/contracts/script/DeployVeyraRegistry.s.sol`.
+The script deploys `CapabilityRegistry` first unless `CAPABILITY_REGISTRY_ADDRESS` is supplied, then deploys `VeyraRegistry` with the audit registry address. The placeholder World ID address is deployment-only and cannot verify real proofs. A real World ID verifier address and matching external nullifier configuration are required outside local Anvil. Record both deployed addresses and set `REGISTRY_ADDRESS` and `NEXT_PUBLIC_REGISTRY_ADDRESS` to the new `VeyraRegistry` address. The deployment script is `blockchain/packages/contracts/script/DeployVeyraRegistry.s.sol`.
 
 The backend signs the requested secret identifier and verifies that the returned World ID action matches the same identifier. The Bazantic provider submission spec is `docs/veyra-bazantic-openapi.yaml`. The legacy HTTP route requires `secretIdentifier` in its request body; the chain listener bypasses this route and trusts only `AgentAuthorized` events from the configured registry.
 
