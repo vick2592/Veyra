@@ -1,367 +1,153 @@
 # Veyra — Blockchain Layer
 
-The on-chain audit mirror for the Veyra capability broker, plus the Foundry
-workspace that builds it.
+Two contracts and the Foundry workspace that builds them.
 
-> **Status: implemented and green.** `CapabilityRegistry.sol` is written, with
-> 24 Foundry tests passing (including two fuzz properties at 256 runs each).
-> Not yet deployed — `REGISTRY_ADDRESS` is still unset.
+| Contract | Size | Role |
+| --- | --- | --- |
+| `VeyraRegistry` | 6.8 KB | the gate — user registry, encrypted secret storage, authorization |
+| `CapabilityRegistry` | 1.0 KB | the kill switch — which agents are barred |
 
-## What goes on chain, and what deliberately does not
+**Status:** implemented, 79 tests, 100% coverage on both, `forge fmt` clean. Deploy
+script validated end to end against a local Anvil. **Not yet deployed to Base
+Sepolia** — `REGISTRY_ADDRESS` is unset.
 
-Veyra lets an AI agent borrow a short-lived, narrowly-scoped capability instead
-of holding a raw API key. The broker decides; the chain remembers.
+## What is verified where
 
-`CapabilityRegistry` is an **append-only audit mirror**. It is emphatically *not*
-the source of truth for authorization. Three consequences shape the whole design:
+This is the thing to be clear about, because it is easy to assume the chain does
+more than it does.
 
-- **Nothing in the request path blocks on a transaction.** The broker mints and
-  redeems capabilities entirely off-chain. If Base Sepolia is down, slow, or the
-  emitter key is missing, the broker keeps working and the audit log lags.
-- **Writes are batched.** An off-chain emitter worker accumulates decisions and
-  flushes them periodically, so a decision's block timestamp is *not* when it
-  happened. Every record carries its own `occurredAt`.
-- **Compromising the chain does not grant access.** An attacker with the emitter
-  key can pollute history, but cannot authorize a single API call.
+**Proof of personhood is verified off chain**, by the backend, against the World ID
+Developer Portal. The contract does not re-verify it.
 
-The chain exists so that a third party — a judge, an auditor, the agent's owner —
-can reconstruct what the broker did and why, without trusting the broker.
+That was a deliberate change. An on-chain `verifyProof` needs the external nullifier
+to match what IDKit derived, and a *fixed* external nullifier gives a human one
+usable nullifier for the life of the deployment — meaning each person could authorize
+exactly once, ever. The two-part demo worked on take one and died on take two.
 
-## Contract: `CapabilityRegistry.sol`
+So `nullifierHash` on `AgentAuthorized` is an **attestation**, not a verification.
+Anyone can put any value there. It is recorded because the backend, which did verify,
+is the thing that acts on it. Never trust that field on its own.
 
-Solidity `0.8.28`, no proxies, no upgradeability, no libraries beyond `forge-std`.
+Replay protection moved to the payment request instead — a request is the thing that
+should be single-use, and unlike a nullifier there is a fresh one every time.
 
-### Types
+## VeyraRegistry
+
+### Users
+
+`registerUser(bytes encryptedUserId, uint32 leafIndex)` — register yourself.
+`registerUserFor(address, bytes, uint32)` — registrar-only, for the backend.
+
+Only the machine holding the Ledger can produce the encrypted blob, hence the second
+path. Reads: `userCount`, `userAt`, `listUsers(offset, limit)`, `getUser`,
+`isRegistered`. `rotateUserId` replaces the ciphertext after a key rotation.
+
+`leafIndex` is the BIP32 leaf the server derives that user's key at. It is derived
+from their World ID nullifier, not assigned — no counter, no race, and a returning
+user always resolves to the same key.
+
+### Secrets
+
+`storeSecret(bytes32 secretId, string label, bytes ciphertext)` — store or rotate.
+`storeSecretFor(address, bytes32, string, bytes)` — registrar-only.
+`revokeSecret(bytes32)` — deactivate.
+
+Calling `storeSecret` again on the same `secretId` bumps `version` and reactivates, so
+store and rotate are one function. Reads: `getSecret`, `secretIdsOf`.
+
+### Authorization
 
 ```solidity
-enum Decision        { Allow, Deny, Downgrade, ConfirmRequired }
-enum Tier            { Untrusted, Verified, Elevated }
-enum ConfirmationMode{ None, Software, LedgerEip712 }
+function authorizeAgent(
+    address agentAddress,
+    bytes32 secretId,
+    uint256 nullifierHash,   // attested off chain — see above
+    bytes32 requestId        // the x402 payment request; single-use
+) external
 ```
 
-`reasonCode` is a `uint16`, not a string. Strings cost gas, cannot be indexed
-usefully, and would duplicate a taxonomy the API and UI already own. The
-frontend maps the code to human text from the shared `reason_code` enum, so the
-timeline reads as prose while the chain stores two bytes.
+Five fail-closed checks: caller registered, agent non-zero, `requestId` non-zero and
+unused, secret exists and is active and belongs to the caller, agent not revoked.
 
-### Events — the contract's real API
+Emits `AgentAuthorized(user, agent, secretId, nullifierHash, requestId, authorizedAt)`
+— the event the backend listener fires on.
 
-The subgraph must build **everything** from these alone: no `eth_call`, no
-contract reads, no off-chain joins. Solidity allows at most three indexed
-parameters, and indexing a dynamic type stores only its hash — so no event below
-indexes a string it needs to read back.
+## CapabilityRegistry
 
-```solidity
-event ResourceRegistered(
-    bytes32 indexed resource,     // keccak256(name)
-    string  name,                 // NOT indexed — the subgraph reads this
-    uint8   riskClass
-);
+`revokeAgent(address, uint16 reasonCode)` and `reinstateAgent(address)`, both
+owner-only and both idempotent so a retried incident-response script cannot fail
+halfway. `isRevoked` is what `VeyraRegistry` consults.
 
-event PrincipalEnrolled(
-    bytes32 indexed nullifierHash,   // World ID nullifier. Never PII.
-    address indexed principal,
-    uint8   verificationLevel,       // orb | device
-    uint64  enrolledAt
-);
+It is required non-zero in `VeyraRegistry`'s constructor, so the kill switch cannot be
+left unwired.
 
-event AgentRegistered(
-    address indexed agent,
-    bytes32 indexed principalNullifier,
-    bytes32 agentPubKeyHash,         // keccak of the agent's ed25519 public key
-    uint64  registeredAt
-);
+This contract previously doubled as an append-only audit log feeding a subgraph. That
+vertical was dropped, and every consumer with it, so those functions were removed
+rather than deployed as code nothing reads.
 
-event CapabilityDecided(
-    bytes32 indexed decisionId,      // broker-generated; the idempotency key
-    address indexed agent,
-    bytes32 indexed resource,
-    uint8   decision,                // Decision
-    uint16  reasonCode,
-    uint64  notionalUsdE6,           // USD * 1e6 — the detector's primary signal
-    uint8   tierAtDecision,          // Tier
-    uint8   confirmationMode,        // ConfirmationMode
-    bytes32 paramsHash,              // commitment to the exact request parameters
-    uint64  occurredAt               // when the BROKER decided, not when mined
-);
+## Deploy
 
-event ConfirmationRecorded(
-    bytes32 indexed decisionId,
-    address indexed confirmer,       // Ledger signer, or the principal
-    uint8   mode,                    // ConfirmationMode
-    bytes32 typedDataHash,           // the EIP-712 digest actually signed
-    uint64  confirmedAt
-);
-
-event CapabilityUsed(
-    bytes32 indexed decisionId,
-    address indexed agent,
-    bytes32 indexed jti,             // single-use token id
-    bool    upstreamOk,
-    uint16  reasonCode,
-    uint64  usedAt
-);
-
-event AgentRevoked(
-    address indexed agent,
-    address indexed by,
-    uint16  reasonCode,
-    uint64  revokedAt
-);
-
-event AgentReinstated(address indexed agent, address indexed by, uint64 reinstatedAt);
-
-event RiskScoreUpdated(
-    address indexed agent,
-    uint16  score,                   // 0..1000
-    uint8   priorTier,
-    uint8   newTier,
-    bytes32 evidenceRef,             // hash of the detector's reasoning
-    uint64  updatedAt
-);
-
-event EmitterSet(address indexed emitter, bool allowed);
-event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
-```
-
-`RiskScoreUpdated` is the one that matters for The Graph submission. It closes
-the loop: the detector reads the subgraph, computes drift, and writes the
-downgrade back on chain, where the subgraph indexes it again. The feedback edge
-is visible as data rather than asserted in a slide.
-
-### Functions
-
-| Signature | Access | Purpose |
-| --- | --- | --- |
-| `constructor(address initialEmitter)` | — | deployer becomes owner |
-| `recordDecisions(DecisionRecord[] calldata) returns (uint256)` | emitter | batch-append decisions; returns count newly written |
-| `recordUses(UseRecord[] calldata) returns (uint256)` | emitter | batch-append redemptions, keyed on `jti` |
-| `recordConfirmation(bytes32, address, uint8, bytes32, uint64)` | emitter | attach a human confirmation |
-| `registerResource(string calldata, uint8) returns (bytes32)` | owner | publish a resource name preimage |
-| `enrollPrincipal(bytes32, address, uint8, uint64)` | emitter | World ID enrollment |
-| `registerAgent(address, bytes32, bytes32, uint64)` | emitter | bind agent to principal |
-| `revokeAgent(address, uint16)` | **owner** | kill switch |
-| `reinstateAgent(address)` | **owner** | undo a revocation |
-| `updateRiskScore(address, uint16, uint8, uint8, bytes32, uint64)` | emitter | detector feedback |
-| `setEmitter(address, bool)` | owner | rotate the emitter key |
-| `transferOwnership(address)` | owner | move the cold key |
-
-Every emitter-facing call takes an explicit `uint64` timestamp, because batched
-writes land long after the event they describe. Owner-driven calls
-(`revokeAgent`, `reinstateAgent`, `registerResource`) use `block.timestamp`, since
-those happen interactively rather than through the batch queue.
-
-`revokeAgent` and `reinstateAgent` are idempotent — repeating one is a silent
-no-op, not a revert, so a retried incident-response script cannot fail halfway.
-
-### Storage
-
-```solidity
-address public owner;
-mapping(address => bool)  public isEmitter;
-mapping(address => bool)  public isRevoked;
-mapping(bytes32 => bool)  public recordedDecision;   // decisionId => seen
-mapping(bytes32 => bool)  public recordedUse;        // jti => seen
-```
-
-Storage is deliberately thin. It exists only to enforce idempotency and the kill
-switch — everything else lives in events, because events are what the subgraph
-reads and they cost roughly an order of magnitude less gas than storage.
-
-## Access control and the emitter key
-
-Two roles. `owner` is a cold key. `isEmitter` is a hot key on a laptop
-(`EMITTER_PRIVATE_KEY`), and the design assumes **it will leak**.
-
-What a leaked emitter key buys an attacker: the ability to append false history —
-fabricated decisions, bogus risk scores, spurious enrollments. That is real, and
-the mitigation is bounded rather than absolute.
-
-What it does **not** buy: authorization. It cannot mint a capability token, cannot
-make the broker call an upstream API, cannot revoke or reinstate an agent (owner
-only), and cannot rewrite or delete an existing record — `recordedDecision` makes
-every `decisionId` write-once.
-
-Containment is `setEmitter(old, false)` from the cold owner key, after which the
-subgraph filters records by the authorized emitter set and flags the window.
-
-## Kill switch
-
-`revokeAgent(address, uint16)` is **owner-only**, sets `isRevoked[agent] = true`,
-and emits `AgentRevoked`.
-
-The subtlety is that revoking on chain cannot itself stop anything, because the
-chain is not in the request path. So revocation works in two layers:
-
-1. **Off-chain, authoritative.** The broker holds its own revocation state and
-   checks it on every decision. This is what actually denies the request, and it
-   **fails closed** — if the broker cannot determine an agent's status, it denies.
-2. **On chain, evidential.** `AgentRevoked` timestamps the decision publicly. The
-   contract still records decisions for a revoked agent, because the log is
-   append-only truth rather than an enforcement point. The subgraph then surfaces
-   any `Allow` with an `occurredAt` after a revocation as an **integrity
-   violation** — which is exactly the anomaly worth showing on camera.
-
-Reinstatement is symmetric and also owner-only.
-
-## Batching and idempotency
-
-The emitter submits arrays. Duplicate submission must be harmless, because a
-worker that crashes between broadcasting and confirming will retry.
-
-- **Idempotency** — keyed on `decisionId` (and `jti` for uses). A record already
-  present is **skipped, not reverted**. Reverting would let one stale entry poison
-  an entire batch.
-- **Partial failure** — the batch is atomic per transaction. Anything not written
-  stays queued in the broker's outbox and is retried in the next flush.
-- **Ordering** — not guaranteed and not relied upon. Consumers order by
-  `occurredAt`, never by block or log index.
-- **Gas** — events over storage, `uint64`/`uint16` packed over `uint256`, and
-  `calldata` arrays. Only the two idempotency mappings touch storage.
-
-## Privacy
-
-No PII on chain, ever. Identity is a World ID nullifier hash.
-
-The tension is that a fully hashed log is also an unreadable one, and this has to
-be legible to someone watching a four-minute video. It resolves per field:
-
-| Field | On chain as | Why |
-| --- | --- | --- |
-| Principal identity | `nullifierHash` | World ID's own unlinkable primitive |
-| Agent key | `keccak(ed25519 pubkey)` | binding without publishing the key |
-| Resource | `keccak(name)` + a one-time `ResourceRegistered` carrying the plaintext | hashed in the hot path, but the subgraph resolves it back to `"coingecko.price.read"` for display |
-| Request parameters | `paramsHash` | a recipient address or amount may be sensitive; the hash still proves what was approved |
-| Notional value | plaintext `uint64` USD·1e6 | the detector needs the magnitude, and it is the story |
-
-So the timeline reads *"agent-3 requested a USDC transfer of $240, downgraded,
-value creep"* while the recipient address stays a commitment.
-
-## What the subgraph builds
-
-| Entity | From | Powers |
-| --- | --- | --- |
-| `Agent` | `AgentRegistered`, `AgentRevoked`, `RiskScoreUpdated` | agent list, current tier and risk badge |
-| `Principal` | `PrincipalEnrolled` | World ID verification state |
-| `Resource` | `ResourceRegistered` | hash-to-name resolution for the timeline |
-| `Decision` | `CapabilityDecided`, `ConfirmationRecorded`, `CapabilityUsed` | the audit timeline |
-| `RiskSnapshot` | `RiskScoreUpdated` | the value-creep chart and the downgrade moment |
-
-The detector needs `(agent, resource, notionalUsdE6, occurredAt)` grouped by
-agent and ordered by time — all four are on `CapabilityDecided`, which is why
-that event carries value in plaintext.
-
-## Foundry tests
-
-24 tests, all passing. Kill switch and idempotency are the two that must be
-airtight, so both are covered from several angles — including that the hot
-emitter key **cannot** reach the kill switch.
+`CapabilityRegistry` first, then `VeyraRegistry` — the gate takes the audit address at
+construction. The script does both.
 
 ```bash
-forge test --root blockchain/packages/contracts -vv
+export DEPLOYER_PRIVATE_KEY=0x...
+export REGISTRAR_ADDRESS=0x...        # optional, defaults to deployer
+export CAPABILITY_REGISTRY_ADDRESS=   # optional, to reuse an existing one
+
+forge script script/DeployVeyraRegistry.s.sol:DeployVeyraRegistry \
+  --root blockchain/packages/contracts \
+  --rpc-url "$RPC_URL" --broadcast --verify
 ```
 
-```
-test_RevokeAgent_SetsFlagAndEmits
-test_RevokeAgent_RevertsForNonOwner
-test_RevokeAgent_IsIdempotent
-test_ReinstateAgent_ClearsFlag
-test_ReinstateAgent_RevertsForNonOwner
-test_RecordDecisions_DuplicateIdIsNoOp
-test_RecordDecisions_BatchWithDuplicate_RecordsOnlyNew
-test_RecordDecisions_RevertsForNonEmitter
-test_RecordDecisions_StillRecordsForRevokedAgent   // append-only truth
-test_RecordUses_DuplicateJtiIsNoOp
-test_SetEmitter_RotatesAndOldKeyRejected
-test_RegisterResource_EmitsReadablePreimage
-test_UpdateRiskScore_EmitsTierTransition
-testFuzz_NotionalUsdE6_NoOverflowAtUint64Bound
-testFuzz_OnlyOwnerCanRevoke
-test_RevokeAgent_RevertsForEmitter
-test_RecordDecisions_RevertsOnInvalidDecisionEnum
-test_RecordDecisions_RevertsOnInvalidTier
-test_RecordDecisions_RevertsOnZeroId
-test_RecordDecisions_RevertsOnEmptyBatch
-test_RegisterResource_RevertsOnEmptyName
-test_UpdateRiskScore_RevertsAboveRange
-test_SetEmitter_RevertsForNonOwner
-```
+No World ID router address or external nullifier is needed — verification is off
+chain.
 
-Malformed records **revert** while duplicates are **skipped**. That split is
-deliberate: a duplicate is an expected retry, whereas a bad enum or a zero id is
-an emitter bug, and the contract fails closed on it.
+Then set `REGISTRY_ADDRESS` in the backend `.env`, `NEXT_PUBLIC_REGISTRY_ADDRESS` in
+the frontend, and hand the ABI from `out/VeyraRegistry.sol/VeyraRegistry.json` to
+whoever is wiring the client.
 
-## Deployment
+Note the frontend's `Web3Provider` currently declares **only Anvil (31337)**. Base
+Sepolia has to be added there before it can talk to a real deployment.
 
-Base Sepolia, chain id `84532`.
+## Test
 
 ```bash
-forge build  --root blockchain/packages/contracts
-forge test   --root blockchain/packages/contracts -vv
-
-forge create --root blockchain/packages/contracts \
-  --rpc-url "$RPC_URL" --private-key "$DEPLOYER_KEY" \
-  src/CapabilityRegistry.sol:CapabilityRegistry
-
-forge verify-contract --chain 84532 "$REGISTRY_ADDRESS" \
-  src/CapabilityRegistry.sol:CapabilityRegistry
+forge test  --root blockchain/packages/contracts          # 79 tests
+forge test  --root blockchain/packages/contracts -vv --match-contract ScenarioTest
 ```
 
-Then set `REGISTRY_ADDRESS` in `.env` and hand the address plus the ABI from
-`out/CapabilityRegistry.sol/CapabilityRegistry.json` to whoever owns the subgraph.
+`ScenarioTest` walks the demo end to end and prints observed state, so behaviour can
+be checked against the design rather than assumed from it. `DesignProperties` covers
+fail-closed behaviour, reentrancy and fuzzed invariants; `InputValidation` covers every
+guard on every entry point.
+
+## Known trade-offs
+
+Stated here rather than discovered by a reviewer.
+
+**On-chain ciphertext is permanent and public.** Anyone can archive it today and
+decrypt everything the day the Ledger seed leaks. `revokeSecret` closes the gate; it
+cannot erase bytes. Storing the ciphertext off chain with only a hash on chain keeps
+every property this design wanted and drops that risk — worth doing if there is time.
+
+**One seed protects every user.** BIP32 derivation isolates users from each other, not
+from a server compromise.
+
+**`secretId` is reversible.** It is `keccak256(name)` over a tiny preimage space, so
+which services each user holds keys for is public. Salting with a per-user value fixes
+it in one line.
+
+**The chain does not prove personhood.** It records that a registered user authorized a
+paid request against a secret they own. Everything about *who they are* rests on the
+backend's off-chain verification.
 
 ## Layout
 
 ```
-blockchain/
-  packages/
-    contracts/          Foundry project — solc 0.8.28
-      src/              CapabilityRegistry.sol
-      test/             CapabilityRegistry.t.sol         24 tests
-      lib/forge-std/    submodule, v1.16.2
-      foundry.toml
-      foundry.lock
-    broker/             TypeScript broker package
+blockchain/packages/contracts/
+  src/     VeyraRegistry.sol, CapabilityRegistry.sol
+  test/    VeyraRegistry, CapabilityRegistry, DesignProperties, InputValidation, Scenario
+  script/  DeployVeyraRegistry.s.sol
+  lib/forge-std/   submodule — git submodule update --init --recursive
 ```
-
-`lib/forge-std` is a git submodule. On a fresh clone:
-
-```bash
-git submodule update --init --recursive
-```
-
-## Known issues in this workspace
-
-The `apps/` + `blockchain/` restructure moved these files without updating their
-relative paths. None of it blocks Foundry, but the pnpm side is inert until fixed:
-
-1. `packages/pnpm-workspace.yaml` globs `packages/*` and `apps/*` — neither
-   exists relative to its new location, so `pnpm -r` resolves **zero** projects
-   and `build`/`typecheck`/`test` silently no-op instead of failing.
-2. `packages/broker/tsconfig.json` extends `../../tsconfig.base.json`, one level
-   too high. The file is at `../tsconfig.base.json`.
-3. `packages/package.json` runs `forge --root packages/contracts`; from its new
-   home that path is `contracts`.
-4. The root `.gitignore` still lists `packages/contracts/{cache,broadcast}/` by
-   the old path, so `forge build` output at the new location is no longer
-   ignored. `out/` is still caught by the bare pattern on line 17; `cache/` and
-   `broadcast/` are not.
-
-There is also no `pnpm-lock.yaml` here yet — one cannot be generated correctly
-until issue 1 is resolved.
-
-## Open questions
-
-- **Agent on-chain identity.** Events key on `address agent`, but agents
-  authenticate with an ed25519 key, which is not an Ethereum address. Either
-  derive a stable synthetic address per agent, or switch the key to `bytes32`.
-  This must be settled before the subgraph schema is written.
-- **`notionalUsdE6` for non-financial resources.** A CoinGecko read has no
-  dollar value. Zero is the obvious answer, but the detector must not read a run
-  of zeros as "no drift" when scope is widening — scope creep and value creep are
-  different signals.
-- **Who holds `owner`?** The kill switch is only as good as the key behind it,
-  and a demo where the owner key sits in the same `.env` as the emitter key
-  undercuts the story.
-- **Where the broker lives.** `apps/backend` and `blockchain/packages/broker`
-  both currently claim that role; the emitter worker belongs to whichever wins.
