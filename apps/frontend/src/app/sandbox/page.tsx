@@ -4,9 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import { decodeAbiParameters, keccak256, encodePacked, toBytes } from 'viem';
 import { useAccount, useConnect, useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
 import {
-  IDKitRequestWidget,
   selfieCheckLegacy,
   orbLegacy,
+  useIDKitRequest,
   type IDKitResult,
   type RpContext,
 } from '@worldcoin/idkit';
@@ -33,11 +33,12 @@ type OnChainProof = {
   proof: string[];
 };
 
-const backendUrl = 'http://localhost:3001';
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 const worldAppId = process.env.NEXT_PUBLIC_WORLD_ID_APP_ID ?? '';
 const worldRpId = process.env.NEXT_PUBLIC_WORLD_ID_RP_ID ?? '';
 const registryAddress = process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}` | undefined;
 const dummyAgentAddress = '0x0000000000000000000000000000000000000001';
+const dummyUserAddress = '0x0000000000000000000000000000000000000002';
 
 const registryAbi = [{
   type: 'function',
@@ -130,6 +131,14 @@ function getWorldIdSignal(
   return (BigInt(digest) >> BigInt(8)).toString();
 }
 
+function getSimulatorUrl(connectorURI: string): string {
+  return `https://simulator.worldcoin.org?connect_url=${encodeURIComponent(connectorURI)}`;
+}
+
+async function copyText(value: string): Promise<void> {
+  await navigator.clipboard.writeText(value);
+}
+
 export default function SandboxPage() {
   const [simulatorState, setSimulatorState] = useState<SimulatorState>('idle');
   const [isMounted, setIsMounted] = useState(false);
@@ -140,7 +149,6 @@ export default function SandboxPage() {
   const [verificationMode, setVerificationMode] = useState<VerificationMode>('selfie');
   const [authorizationState, setAuthorizationState] = useState<AuthorizationState>('idle');
   const [rpContext, setRpContext] = useState<RpContext | null>(null);
-  const [widgetOpen, setWidgetOpen] = useState(false);
   const [worldIdProof, setWorldIdProof] = useState<OnChainProof | null>(null);
   const [authorizationTxHash, setAuthorizationTxHash] = useState<`0x${string}` | null>(null);
   const [executionStatus, setExecutionStatus] = useState<PendingRequest['status'] | null>(null);
@@ -377,6 +385,93 @@ export default function SandboxPage() {
     hasWalletAddress &&
     hasRegistryAddress;
 
+  const {
+    open: openIdKit,
+    reset: resetIdKit,
+    connectorURI,
+    result: idKitResult,
+    isSuccess: isIdKitSuccess,
+    isError: isIdKitError,
+    errorCode: idKitErrorCode,
+    isOpen: isIdKitOpen,
+  } = useIDKitRequest({
+    app_id: worldAppId as `app_${string}`,
+    action: selectedRequest?.secretIdentifier ?? 'sandbox',
+    rp_context: rpContext ?? {
+      rp_id: worldRpId,
+      nonce: '',
+      created_at: 0,
+      expires_at: 0,
+      signature: '',
+    },
+    environment: 'staging',
+    allow_legacy_proofs: true,
+    preset: verificationMode === 'selfie'
+      ? selfieCheckLegacy({
+          signal: getWorldIdSignal(
+            address ?? dummyUserAddress,
+            (selectedRequest?.agentAddress ?? dummyAgentAddress) as `0x${string}`,
+            getSecretId(selectedRequest?.secretIdentifier ?? 'sandbox'),
+          ),
+        })
+      : orbLegacy({
+          signal: getWorldIdSignal(
+            address ?? dummyUserAddress,
+            (selectedRequest?.agentAddress ?? dummyAgentAddress) as `0x${string}`,
+            getSecretId(selectedRequest?.secretIdentifier ?? 'sandbox'),
+          ),
+        }),
+  });
+  const simulatorUrl = connectorURI === null ? null : getSimulatorUrl(connectorURI);
+
+  useEffect(() => {
+    if (rpContext === null || selectedRequest === undefined || address === undefined || isIdKitOpen) {
+      return;
+    }
+    openIdKit();
+    setAuthorizationState('idkit_open');
+  }, [address, isIdKitOpen, openIdKit, rpContext, selectedRequestId]);
+
+  useEffect(() => {
+    if (!isIdKitSuccess || idKitResult === null) {
+      return;
+    }
+    console.log('[World ID] headless request completed', {
+      result: idKitResult,
+      protocolVersion: idKitResult.protocol_version,
+      responseCount: idKitResult.responses?.length ?? 0,
+    });
+    try {
+      const proof = getOnChainProof(idKitResult);
+      proofCandidate.current = proof;
+      setWorldIdProof(proof);
+      setAuthorizationState('proof_ready');
+      setRpContext(null);
+      resetIdKit();
+      setMessage('World ID proof captured and ready for authorization.');
+    } catch (error) {
+      proofCandidate.current = null;
+      setWorldIdProof(null);
+      setAuthorizationState('error');
+      setRpContext(null);
+      resetIdKit();
+      setMessage(error instanceof Error ? error.message : 'World ID proof could not be normalized.');
+    }
+  }, [idKitResult, isIdKitSuccess, resetIdKit]);
+
+  useEffect(() => {
+    if (!isIdKitError || idKitErrorCode === null) {
+      return;
+    }
+    console.error('[World ID] headless request failed', {errorCode: idKitErrorCode});
+    proofCandidate.current = null;
+    setWorldIdProof(null);
+    setAuthorizationState('error');
+    setRpContext(null);
+    resetIdKit();
+    setMessage(`World ID verification failed: ${idKitErrorCode}.`);
+  }, [idKitErrorCode, isIdKitError, resetIdKit]);
+
   return (
     <main className="min-h-screen px-5 py-6 sm:px-10 sm:py-10">
       <div className="mx-auto min-h-[calc(100vh-3rem)] max-w-6xl rounded-4xl border border-(--line) bg-[rgba(255,253,246,0.66)] p-6 shadow-[0_24px_80px_rgba(23,33,27,0.12)] backdrop-blur sm:min-h-[calc(100vh-5rem)] sm:p-10">
@@ -461,7 +556,7 @@ export default function SandboxPage() {
                     setSelectedSecretIdentifier(request.secretIdentifier);
                     setAuthorizationState('idle');
                     setRpContext(null);
-                    setWidgetOpen(false);
+                    resetIdKit();
                     setWorldIdProof(null);
                     setAuthorizationTxHash(null);
                     setExecutionStatus(null);
@@ -527,7 +622,7 @@ export default function SandboxPage() {
                           setWorldIdProof(null);
                           proofCandidate.current = null;
                           setRpContext(null);
-                          setWidgetOpen(false);
+                          resetIdKit();
                           setAuthorizationState('idle');
                           setMessage(`${mode === 'selfie' ? 'Selfie Check' : 'Orb'} mode selected.`);
                         }}
@@ -597,8 +692,6 @@ export default function SandboxPage() {
                         expires_at: body.expires_at,
                         signature: body.signature,
                       });
-                      setWidgetOpen(true);
-                      setAuthorizationState('idkit_open');
                       setMessage(`Complete ${verificationLabel} to prove a live human is authorizing this agent request.`);
                     } catch (error) {
                       setAuthorizationState('error');
@@ -648,97 +741,44 @@ export default function SandboxPage() {
             </div>
           </div>
 
-          {rpContext !== null && selectedRequest !== undefined && address !== undefined && (
-            <IDKitRequestWidget
-              open={widgetOpen}
-              onOpenChange={setWidgetOpen}
-              app_id={worldAppId as `app_${string}`}
-              action={selectedRequest.secretIdentifier}
-              rp_context={rpContext}
-              environment="staging"
-              allow_legacy_proofs={true}
-              preset={
-                verificationMode === 'selfie'
-                  ? selfieCheckLegacy({
-                      signal: getWorldIdSignal(
-                        address,
-                        selectedRequest.agentAddress as `0x${string}`,
-                        getSecretId(selectedRequest.secretIdentifier),
-                      ),
-                    })
-                  : orbLegacy({
-                      signal: getWorldIdSignal(
-                        address,
-                        selectedRequest.agentAddress as `0x${string}`,
-                        getSecretId(selectedRequest.secretIdentifier),
-                      ),
-                    })
-              }
-              handleVerify={async (result: IDKitResult) => {
-                console.log('[World ID] handleVerify received raw payload', {
-                  result,
-                  protocolVersion: result.protocol_version,
-                  responseCount: result.responses?.length ?? 0,
-                  responseKeys: Object.keys(result.responses?.[0] ?? {}),
-                  proofType: typeof (result.responses?.[0] as {proof?: unknown} | undefined)?.proof,
-                  proofLength: Array.isArray((result.responses?.[0] as {proof?: unknown} | undefined)?.proof)
-                    ? ((result.responses?.[0] as {proof?: unknown[]} | undefined)?.proof?.length ?? 0)
-                    : undefined,
-                });
-                try {
-                  proofCandidate.current = getOnChainProof(result);
-                  setAuthorizationState('proof_ready');
-                  setMessage('Proof received. Completing World ID verification...');
-                  console.log('[World ID] handleVerify normalized proof', proofCandidate.current);
-                } catch (error) {
-                  proofCandidate.current = null;
-                  setWorldIdProof(null);
-                  setAuthorizationState('error');
-                  setRpContext(null);
-                  setWidgetOpen(false);
-                  setMessage(error instanceof Error ? error.message : 'World ID proof could not be normalized.');
-                  console.error('[World ID] handleVerify rejected payload', {error, result});
-                }
-              }}
-              onSuccess={(result: IDKitResult) => {
-                console.log('[World ID] onSuccess received callback payload', {
-                  result,
-                  protocolVersion: result.protocol_version,
-                  responseCount: result.responses?.length ?? 0,
-                });
-                const proof = proofCandidate.current;
-                if (proof === null) {
-                  setAuthorizationState('error');
-                  setMessage('World ID completed without an on-chain proof.');
-                  console.error('[World ID] onSuccess had no normalized proof candidate');
-                  return;
-                }
-                console.log('[World ID] onSuccess using normalized proof', proof);
-                setWorldIdProof({
-                  root: proof.root,
-                  nullifierHash: proof.nullifierHash,
-                  proof: proof.proof,
-                });
-                setAuthorizationState('proof_ready');
-                setRpContext(null);
-                setWidgetOpen(false);
-                setMessage('World ID proof captured and ready for authorization.');
-              }}
-              onError={(errorCode: string) => {
-                console.error('[World ID] onError received callback error', {
-                  errorCode,
-                  proofCandidate: proofCandidate.current,
-                  authorizationState,
-                });
-                proofCandidate.current = null;
-                setWorldIdProof(null);
-                setAuthorizationState('error');
-                setRpContext(null);
-                setWidgetOpen(false);
-                setMessage(`World ID verification failed: ${errorCode}.`);
-              }}
-              autoClose
-            />
+          {connectorURI !== null && rpContext !== null && (
+            <div className="mt-6 rounded-2xl border border-(--line) bg-white/55 p-4 text-sm" aria-live="polite">
+              <p className="font-semibold text-(--ink)">Simulator connection fallback</p>
+              <p className="mt-1 leading-6 text-(--muted)">
+                Copy the raw connection URI to the World ID Simulator or open the generated Simulator link on the testing device.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void copyText(connectorURI).then(() => setMessage('World ID connection URI copied.')).catch(() => setMessage('The connection URI could not be copied.'))}
+                  className="rounded-full border border-(--ink) px-4 py-2 text-xs font-semibold text-(--ink) transition hover:bg-white"
+                >
+                  Copy Simulator URI
+                </button>
+                {simulatorUrl !== null && (
+                  <a
+                    href={simulatorUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-full bg-(--ink) px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#2a3a2f]"
+                  >
+                    Open World ID Simulator
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetIdKit();
+                    setRpContext(null);
+                    setAuthorizationState('idle');
+                    setMessage('World ID authorization cancelled.');
+                  }}
+                  className="rounded-full px-4 py-2 text-xs font-semibold text-(--muted) transition hover:bg-white hover:text-(--ink)"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           )}
         </section>
 
