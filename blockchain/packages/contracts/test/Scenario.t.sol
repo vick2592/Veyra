@@ -12,7 +12,6 @@ contract ScenarioTest is Test {
     VeyraRegistry internal gate;
 
     address internal owner = address(0xC0FFEE);
-    address internal emitter = address(0xE471);
     address internal registrar = address(0x5E4E4);
     address internal alice = address(0xA11CE);
     address internal bob = address(0xB0B);
@@ -23,7 +22,7 @@ contract ScenarioTest is Test {
 
     function setUp() public {
         vm.startPrank(owner);
-        audit = new CapabilityRegistry(emitter);
+        audit = new CapabilityRegistry();
         gate = new VeyraRegistry(address(audit), registrar);
         vm.stopPrank();
     }

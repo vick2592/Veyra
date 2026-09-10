@@ -38,7 +38,7 @@ contract VeyraRegistryTest is Test {
 
     function setUp() public {
         vm.startPrank(owner);
-        audit = new CapabilityRegistry(owner);
+        audit = new CapabilityRegistry();
         registry = new VeyraRegistry(address(audit), registrar);
         vm.stopPrank();
     }

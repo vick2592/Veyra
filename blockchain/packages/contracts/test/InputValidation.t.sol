@@ -13,7 +13,6 @@ contract InputValidationTest is Test {
     VeyraRegistry internal registry;
 
     address internal owner = address(0xC0FFEE);
-    address internal emitter = address(0xE471);
     address internal stranger = address(0xBAD);
     address internal registrar = address(0x5E4E4);
     address internal user = address(0xBEEF);
@@ -23,7 +22,7 @@ contract InputValidationTest is Test {
 
     function setUp() public {
         vm.startPrank(owner);
-        audit = new CapabilityRegistry(emitter);
+        audit = new CapabilityRegistry();
         registry = new VeyraRegistry(address(audit), registrar);
         vm.stopPrank();
 
@@ -33,42 +32,7 @@ contract InputValidationTest is Test {
         vm.stopPrank();
     }
 
-    function _decision(bytes32 id) internal view returns (CapabilityRegistry.DecisionRecord[] memory b) {
-        b = new CapabilityRegistry.DecisionRecord[](1);
-        b[0] = CapabilityRegistry.DecisionRecord({
-            decisionId: id,
-            agent: agent,
-            resource: SECRET_ID,
-            decision: 0,
-            reasonCode: 1,
-            notionalUsdE6: 1,
-            tierAtDecision: 0,
-            confirmationMode: 0,
-            paramsHash: bytes32(0),
-            occurredAt: 1
-        });
-    }
-
-    function _use(bytes32 id, bytes32 jti) internal view returns (CapabilityRegistry.UseRecord[] memory b) {
-        b = new CapabilityRegistry.UseRecord[](1);
-        b[0] = CapabilityRegistry.UseRecord({
-            decisionId: id, agent: agent, jti: jti, upstreamOk: true, reasonCode: 0, usedAt: 1
-        });
-    }
-
     // ============================================== CapabilityRegistry guards ==
-
-    function test_SetEmitter_RevertsOnZeroAddress() public {
-        vm.prank(owner);
-        vm.expectRevert(CapabilityRegistry.ZeroAddress.selector);
-        audit.setEmitter(address(0), true);
-    }
-
-    function test_SetEmitter_CanDisableAnEmitter() public {
-        vm.prank(owner);
-        audit.setEmitter(emitter, false);
-        assertFalse(audit.isEmitter(emitter));
-    }
 
     function test_RevokeAgent_RevertsOnZeroAddress() public {
         vm.prank(owner);
@@ -84,131 +48,8 @@ contract InputValidationTest is Test {
 
     function test_ReinstateAgent_IsIdempotentWhenNotRevoked() public {
         vm.prank(owner);
-        audit.reinstateAgent(agent); // never revoked — must be a silent no-op
+        audit.reinstateAgent(agent);
         assertFalse(audit.isRevoked(agent));
-    }
-
-    function test_EnrollPrincipal_RevertsOnZeroPrincipal() public {
-        vm.prank(emitter);
-        vm.expectRevert(CapabilityRegistry.ZeroAddress.selector);
-        audit.enrollPrincipal(bytes32("n"), address(0), 1, 0);
-    }
-
-    function test_RegisterAgent_RevertsOnZeroAgent() public {
-        vm.prank(emitter);
-        vm.expectRevert(CapabilityRegistry.ZeroAddress.selector);
-        audit.registerAgent(address(0), bytes32("n"), keccak256("k"), 0);
-    }
-
-    function test_RegisterAgent_RevertsOnZeroPrincipalNullifier() public {
-        vm.prank(emitter);
-        vm.expectRevert(CapabilityRegistry.ZeroId.selector);
-        audit.registerAgent(agent, bytes32(0), keccak256("k"), 0);
-    }
-
-    function test_RecordDecisions_RevertsOnZeroAgentInRecord() public {
-        CapabilityRegistry.DecisionRecord[] memory b = _decision(bytes32("d1"));
-        b[0].agent = address(0);
-
-        vm.prank(emitter);
-        vm.expectRevert(CapabilityRegistry.ZeroAddress.selector);
-        audit.recordDecisions(b);
-    }
-
-    function test_RecordDecisions_RevertsOnInvalidConfirmationMode() public {
-        CapabilityRegistry.DecisionRecord[] memory b = _decision(bytes32("d1"));
-        b[0].confirmationMode = 9;
-
-        vm.prank(emitter);
-        vm.expectRevert(abi.encodeWithSelector(CapabilityRegistry.InvalidConfirmationMode.selector, uint8(9)));
-        audit.recordDecisions(b);
-    }
-
-    function test_RecordUses_RevertsOnZeroDecisionId() public {
-        vm.prank(emitter);
-        vm.expectRevert(CapabilityRegistry.ZeroId.selector);
-        audit.recordUses(_use(bytes32(0), bytes32("j1")));
-    }
-
-    function test_RecordUses_RevertsOnZeroJti() public {
-        vm.prank(emitter);
-        vm.expectRevert(CapabilityRegistry.ZeroId.selector);
-        audit.recordUses(_use(bytes32("d1"), bytes32(0)));
-    }
-
-    function test_RecordUses_RevertsOnZeroAgent() public {
-        CapabilityRegistry.UseRecord[] memory b = _use(bytes32("d1"), bytes32("j1"));
-        b[0].agent = address(0);
-
-        vm.prank(emitter);
-        vm.expectRevert(CapabilityRegistry.ZeroAddress.selector);
-        audit.recordUses(b);
-    }
-
-    function test_RecordUses_BatchWithDuplicateJtiRecordsOnlyNew() public {
-        vm.startPrank(emitter);
-        audit.recordUses(_use(bytes32("d1"), bytes32("j1")));
-
-        CapabilityRegistry.UseRecord[] memory b = new CapabilityRegistry.UseRecord[](2);
-        b[0] = _use(bytes32("d1"), bytes32("j1"))[0];
-        b[1] = _use(bytes32("d2"), bytes32("j2"))[0];
-        assertEq(audit.recordUses(b), 1);
-        vm.stopPrank();
-    }
-
-    function test_RecordConfirmation_RevertsOnZeroDecisionId() public {
-        vm.prank(emitter);
-        vm.expectRevert(CapabilityRegistry.ZeroId.selector);
-        audit.recordConfirmation(bytes32(0), agent, 0, bytes32(0), 0);
-    }
-
-    function test_RecordConfirmation_RevertsOnZeroConfirmer() public {
-        vm.prank(emitter);
-        vm.expectRevert(CapabilityRegistry.ZeroAddress.selector);
-        audit.recordConfirmation(bytes32("d1"), address(0), 0, bytes32(0), 0);
-    }
-
-    function test_UpdateRiskScore_RevertsOnZeroAgent() public {
-        vm.prank(emitter);
-        vm.expectRevert(CapabilityRegistry.ZeroAddress.selector);
-        audit.updateRiskScore(address(0), 1, 0, 0, bytes32(0), 0);
-    }
-
-    function test_UpdateRiskScore_RevertsOnInvalidPriorTier() public {
-        vm.prank(emitter);
-        vm.expectRevert(abi.encodeWithSelector(CapabilityRegistry.InvalidTier.selector, uint8(9)));
-        audit.updateRiskScore(agent, 1, 9, 0, bytes32(0), 0);
-    }
-
-    function test_UpdateRiskScore_RevertsOnInvalidNewTier() public {
-        vm.prank(emitter);
-        vm.expectRevert(abi.encodeWithSelector(CapabilityRegistry.InvalidTier.selector, uint8(9)));
-        audit.updateRiskScore(agent, 1, 0, 9, bytes32(0), 0);
-    }
-
-    function test_UpdateRiskScore_AcceptsBoundaryScore() public {
-        vm.prank(emitter);
-        audit.updateRiskScore(agent, 1000, 0, 0, bytes32(0), 0); // 1000 is the max, not out of range
-    }
-
-    function test_UpdateRiskScore_RevertsForNonEmitter() public {
-        vm.prank(stranger);
-        vm.expectRevert(CapabilityRegistry.NotEmitter.selector);
-        audit.updateRiskScore(agent, 1, 0, 0, bytes32(0), 0);
-    }
-
-    /// @dev onlyOwner is inlined per function, so each call site is its own branch.
-    ///      Resource registration is the one that had no non-owner test.
-    function test_RegisterResource_RevertsForNonOwner() public {
-        vm.prank(stranger);
-        vm.expectRevert(CapabilityRegistry.NotOwner.selector);
-        audit.registerResource("coingecko.price.read", 0);
-    }
-
-    function test_RegisterResource_RevertsForEmitter() public {
-        vm.prank(emitter);
-        vm.expectRevert(CapabilityRegistry.NotOwner.selector);
-        audit.registerResource("coingecko.price.read", 0);
     }
 
     // =================================================== VeyraRegistry guards ==
@@ -241,7 +82,7 @@ contract InputValidationTest is Test {
 
     function test_SetAuditRegistry_RepointsAndTakesEffect() public {
         vm.startPrank(owner);
-        CapabilityRegistry fresh = new CapabilityRegistry(emitter);
+        CapabilityRegistry fresh = new CapabilityRegistry();
         registry.setAuditRegistry(address(fresh));
         assertEq(address(registry.auditRegistry()), address(fresh));
 

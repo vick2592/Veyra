@@ -36,7 +36,6 @@ contract DesignPropertiesTest is Test {
     VeyraRegistry internal gate;
 
     address internal owner = address(0xC0FFEE);
-    address internal emitter = address(0xE471);
     address internal registrar = address(0x5E4E4);
     address internal user = address(0xBEEF);
     address internal agent = address(0xA6E7);
@@ -45,7 +44,7 @@ contract DesignPropertiesTest is Test {
 
     function setUp() public {
         vm.startPrank(owner);
-        audit = new CapabilityRegistry(emitter);
+        audit = new CapabilityRegistry();
         gate = new VeyraRegistry(address(audit), registrar);
         vm.stopPrank();
 
@@ -93,36 +92,6 @@ contract DesignPropertiesTest is Test {
         vm.stopPrank();
     }
 
-    /// @dev The audit log is append-only: no decisionId is ever written twice, whatever
-    ///      order or repetition the emitter submits.
-    function testFuzz_DecisionIdIsWriteOnce(uint8 repeats, uint256 idSeed) public {
-        bytes32 id = keccak256(abi.encode(idSeed));
-        vm.assume(id != bytes32(0));
-        uint256 n = uint256(repeats) % 8 + 1;
-
-        CapabilityRegistry.DecisionRecord[] memory batch = new CapabilityRegistry.DecisionRecord[](1);
-        batch[0] = CapabilityRegistry.DecisionRecord({
-            decisionId: id,
-            agent: agent,
-            resource: SECRET_ID,
-            decision: 0,
-            reasonCode: 1,
-            notionalUsdE6: 1,
-            tierAtDecision: 0,
-            confirmationMode: 0,
-            paramsHash: bytes32(0),
-            occurredAt: 1
-        });
-
-        uint256 totalWritten;
-        for (uint256 i = 0; i < n; ++i) {
-            vm.prank(emitter);
-            totalWritten += audit.recordDecisions(batch);
-        }
-
-        assertEq(totalWritten, 1, "the same decision was written more than once");
-    }
-
     /// @dev Revoking in the audit registry must actually close the gate, for any agent.
     function testFuzz_RevocationBlocksAuthorization(address anyAgent) public {
         vm.assume(anyAgent != address(0));
@@ -144,22 +113,6 @@ contract DesignPropertiesTest is Test {
 
         vm.expectRevert(VeyraRegistry.RequestAlreadyUsed.selector);
         gate.authorizeAgent(agent, SECRET_ID, nullifier, requestId);
-        vm.stopPrank();
-    }
-
-    /// @dev The emitter is a hot key. It must never reach an owner-only lever.
-    function testFuzz_EmitterCannotReachOwnerLevers(uint16 reasonCode) public {
-        vm.startPrank(emitter);
-
-        vm.expectRevert(CapabilityRegistry.NotOwner.selector);
-        audit.revokeAgent(agent, reasonCode);
-
-        vm.expectRevert(CapabilityRegistry.NotOwner.selector);
-        audit.reinstateAgent(agent);
-
-        vm.expectRevert(CapabilityRegistry.NotOwner.selector);
-        audit.setEmitter(emitter, true);
-
         vm.stopPrank();
     }
 
