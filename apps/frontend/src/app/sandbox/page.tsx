@@ -6,6 +6,7 @@ import { useAccount, useConnect, useWaitForTransactionReceipt, useWriteContract 
 import {
   IDKitRequestWidget,
   selfieCheckLegacy,
+  orbLegacy,
   type IDKitResult,
   type RpContext,
 } from '@worldcoin/idkit';
@@ -614,26 +615,23 @@ export default function SandboxPage() {
               rp_context={rpContext}
               environment="staging"
               allow_legacy_proofs={true}
-              {...(verificationMode === 'selfie'
-                ? {
-                    preset: selfieCheckLegacy({
+              preset={
+                verificationMode === 'selfie'
+                  ? selfieCheckLegacy({
                       signal: getWorldIdSignal(
                         address,
                         selectedRequest.agentAddress as `0x${string}`,
                         getSecretId(selectedRequest.secretIdentifier),
                       ),
-                    }),
-                  }
-                : {
-                    constraints: {
-                      type: 'proof_of_human' as const,
+                    })
+                  : orbLegacy({
                       signal: getWorldIdSignal(
                         address,
                         selectedRequest.agentAddress as `0x${string}`,
                         getSecretId(selectedRequest.secretIdentifier),
                       ),
-                    },
-                  })}
+                    })
+              }
               handleVerify={async (result: IDKitResult) => {
                 proofCandidate.current = getOnChainProof(result);
                 setMessage('Proof received. Completing World ID verification...');
