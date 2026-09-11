@@ -17,7 +17,7 @@ import {
   registryAbi,
   registryAddress,
 } from '@/lib/worldIdAuthorization';
-import type { AccessRequest } from './AccessRequestToast';
+import type { AccessRequest } from './AccessRequestModal';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 const worldAppId = process.env.NEXT_PUBLIC_WORLD_ID_APP_ID ?? '';

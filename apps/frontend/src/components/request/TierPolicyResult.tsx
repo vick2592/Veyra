@@ -2,7 +2,7 @@
 
 import { Card } from '@/components/ui/Card';
 import { getActionNarrative, getAgentLabel } from '@/lib/demoNarrative';
-import type { AccessRequest } from './AccessRequestToast';
+import type { AccessRequest } from './AccessRequestModal';
 
 /**
  * No tier/policy engine exists anywhere in the backend yet (CapabilityRegistry's

@@ -3,7 +3,7 @@
 import { HugeiconsIcon } from '@hugeicons/react';
 import { ArrowRight02Icon } from '@hugeicons/core-free-icons';
 import { getActionNarrative } from '@/lib/demoNarrative';
-import type { AccessRequest } from './AccessRequestToast';
+import type { AccessRequest } from './AccessRequestModal';
 
 const reasonCopy: Record<'user_denied' | 'expired', { heading: string; body: string }> = {
   expired: {

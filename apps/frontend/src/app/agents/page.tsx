@@ -6,9 +6,14 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { Robot01Icon } from '@hugeicons/core-free-icons';
 import { DashboardShell } from '@/components/ui/DashboardShell';
 import { Card } from '@/components/ui/Card';
+import { AccessRequestModal, type AccessRequest } from '@/components/request/AccessRequestModal';
 import { DEMO_AGENT_ADDRESS, DEMO_SECRET_IDENTIFIER, getAgentLabel } from '@/lib/demoNarrative';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
+
+type PendingRequest = AccessRequest & {
+  status: 'pending_human_auth' | 'executing' | 'completed' | 'failed';
+};
 
 type AgentStatus = 'active' | 'revoked';
 
@@ -55,30 +60,44 @@ export default function AgentsPage() {
   const [activeFilter, setActiveFilter] = useState<'all' | AgentStatus>('all');
   const [isSimulating, setIsSimulating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [modalRequest, setModalRequest] = useState<PendingRequest | null>(null);
+  const [isEvaluating, setIsEvaluating] = useState(false);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
+  // Access Request is a modal, not a page (matches its Figma surface type) —
+  // it opens here on /agents rather than at the top of a separate route.
+  // Polling still runs so a request from a real, non-simulated agent surfaces
+  // it too, not just the ones this page's own button creates.
   useEffect(() => {
     const controller = new AbortController();
 
-    async function refreshPendingCount() {
+    async function refreshPending() {
       try {
         const response = await fetch(`${backendUrl}/api/bazantic/pending`, { signal: controller.signal });
         if (!response.ok) {
           return;
         }
-        const body = (await response.json()) as { requests?: unknown[] };
-        setPendingCount(body.requests?.length ?? 0);
+        const body = (await response.json()) as { requests?: PendingRequest[] };
+        const requests = body.requests ?? [];
+        setPendingCount(requests.length);
+        setModalRequest((current) => {
+          if (current !== null) {
+            return current;
+          }
+          return requests.find((request) => !dismissedIds.has(request.requestId)) ?? null;
+        });
       } catch {
         // Best-effort — the bell just won't update this tick.
       }
     }
 
-    void refreshPendingCount();
-    const interval = window.setInterval(() => void refreshPendingCount(), 3_000);
+    void refreshPending();
+    const interval = window.setInterval(() => void refreshPending(), 3_000);
     return () => {
       controller.abort();
       window.clearInterval(interval);
     };
-  }, []);
+  }, [dismissedIds]);
 
   async function handleSimulate() {
     setIsSimulating(true);
@@ -100,15 +119,35 @@ export default function AgentsPage() {
           idempotencyKey,
         }),
       });
+      const body = (await response.json().catch(() => null)) as (PendingRequest & { error?: string }) | null;
       if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
         throw new Error(body?.error ?? `Request failed with HTTP ${response.status}.`);
       }
-      router.push('/request');
+      if (body !== null) {
+        setModalRequest(body);
+      }
     } catch (error) {
-      setIsSimulating(false);
       setErrorMessage(error instanceof Error ? error.message : 'The request could not be sent.');
+    } finally {
+      setIsSimulating(false);
     }
+  }
+
+  function handleCancelRequest() {
+    if (modalRequest !== null) {
+      setDismissedIds((current) => new Set(current).add(modalRequest.requestId));
+    }
+    setModalRequest(null);
+  }
+
+  function handleEvaluateRequest() {
+    if (modalRequest === null) {
+      return;
+    }
+    setIsEvaluating(true);
+    window.setTimeout(() => {
+      router.push(`/request?requestId=${encodeURIComponent(modalRequest.requestId)}`);
+    }, 400);
   }
 
   const visibleAgents = agents.filter((agent) => activeFilter === 'all' || agent.status === activeFilter);
@@ -201,6 +240,14 @@ export default function AgentsPage() {
         </button>
         {errorMessage !== null && <p className="text-sm text-(--dark-400)">{errorMessage}</p>}
       </div>
+
+      <AccessRequestModal
+        open={modalRequest !== null}
+        request={modalRequest}
+        isEvaluating={isEvaluating}
+        onEvaluate={handleEvaluateRequest}
+        onCancel={handleCancelRequest}
+      />
     </DashboardShell>
   );
 }
