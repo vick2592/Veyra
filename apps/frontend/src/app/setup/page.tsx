@@ -27,7 +27,7 @@ export default function SetupPage() {
   const canContinue = isConnected && secretState === 'done';
 
   return (
-    <SplitScreenShell>
+    <SplitScreenShell heroImage="/hero-keyring.png">
       <p className="mb-4 text-sm font-semibold uppercase tracking-[0.16em] text-(--dark-300)">
         Setup
       </p>
