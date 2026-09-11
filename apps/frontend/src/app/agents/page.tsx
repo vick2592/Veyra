@@ -7,6 +7,8 @@ import { Robot01Icon } from '@hugeicons/core-free-icons';
 import { DashboardShell } from '@/components/ui/DashboardShell';
 import { Card } from '@/components/ui/Card';
 import { AccessRequestModal, type AccessRequest } from '@/components/request/AccessRequestModal';
+import { AgentDetailDrawer } from '@/components/agents/AgentDetailDrawer';
+import { StatusPill, type AgentStatus } from '@/components/agents/StatusPill';
 import { DEMO_AGENT_ADDRESS, DEMO_SECRET_IDENTIFIER, getAgentLabel } from '@/lib/demoNarrative';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
@@ -14,8 +16,6 @@ const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001
 type PendingRequest = AccessRequest & {
   status: 'pending_human_auth' | 'executing' | 'completed' | 'failed';
 };
-
-type AgentStatus = 'active' | 'revoked';
 
 type DemoAgent = {
   address: string;
@@ -46,14 +46,6 @@ const filters: { key: 'all' | AgentStatus; label: string }[] = [
   { key: 'revoked', label: 'Revoked' },
 ];
 
-function StatusPill({ status }: { status: AgentStatus }) {
-  return status === 'active' ? (
-    <span className="rounded-full bg-[#DCFCE7] px-3 py-1 text-xs font-semibold text-[#15803D]">Active</span>
-  ) : (
-    <span className="rounded-full bg-(--dark-50) px-3 py-1 text-xs font-semibold text-(--dark-300)">Revoked</span>
-  );
-}
-
 export default function AgentsPage() {
   const router = useRouter();
   const [pendingCount, setPendingCount] = useState(0);
@@ -63,6 +55,7 @@ export default function AgentsPage() {
   const [modalRequest, setModalRequest] = useState<PendingRequest | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const [detailAgent, setDetailAgent] = useState<DemoAgent | null>(null);
 
   // Access Request is a modal, not a page (matches its Figma surface type) —
   // it opens here on /agents rather than at the top of a separate route.
@@ -218,9 +211,8 @@ export default function AgentsPage() {
               <p className="text-sm text-(--dark-300)">{agent.description}</p>
               <button
                 type="button"
-                disabled
-                title="Agent detail view is coming soon"
-                className="shrink-0 rounded-full bg-(--purple-500)/40 px-4 py-2 text-xs font-semibold text-white cursor-not-allowed"
+                onClick={() => setDetailAgent(agent)}
+                className="shrink-0 rounded-full bg-(--purple-500) px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#6b4fe6]"
               >
                 View agent
               </button>
@@ -233,7 +225,8 @@ export default function AgentsPage() {
         <button
           type="button"
           onClick={() => void handleSimulate()}
-          disabled={isSimulating}
+          disabled={isSimulating || modalRequest !== null}
+          title={modalRequest !== null ? 'Resolve the open request first' : undefined}
           className="inline-flex items-center justify-center rounded-full border border-(--purple-500) px-6 py-3 text-sm font-semibold text-(--purple-500) transition hover:bg-(--purple-500)/10 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSimulating ? 'Sending request...' : 'Simulate agent request'}
@@ -248,6 +241,8 @@ export default function AgentsPage() {
         onEvaluate={handleEvaluateRequest}
         onCancel={handleCancelRequest}
       />
+
+      <AgentDetailDrawer open={detailAgent !== null} agent={detailAgent} onClose={() => setDetailAgent(null)} />
     </DashboardShell>
   );
 }
