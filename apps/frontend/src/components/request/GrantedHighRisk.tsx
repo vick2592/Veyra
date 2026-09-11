@@ -25,11 +25,11 @@ type ExecutionStatus = {
 export function GrantedHighRisk({
   request,
   txHash,
-  onDone,
+  onContinue,
 }: {
   request: AccessRequest;
   txHash: `0x${string}`;
-  onDone: () => void;
+  onContinue: () => void;
 }) {
   const narrative = getActionNarrative(request.secretIdentifier);
   const [execution, setExecution] = useState<ExecutionState>('executing');
@@ -95,10 +95,10 @@ export function GrantedHighRisk({
       {execution !== 'executing' && (
         <button
           type="button"
-          onClick={onDone}
+          onClick={onContinue}
           className="mt-10 inline-flex min-w-56 items-center justify-center gap-2 rounded-full bg-(--purple-500) px-6 py-4 text-sm font-semibold text-white transition hover:bg-[#6b4fe6]"
         >
-          Done
+          Continue
           <HugeiconsIcon icon={ArrowRight02Icon} size={18} strokeWidth={1.5} />
         </button>
       )}

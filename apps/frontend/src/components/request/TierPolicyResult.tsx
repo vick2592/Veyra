@@ -1,7 +1,5 @@
 'use client';
 
-import { ArrowRight02Icon } from '@hugeicons/core-free-icons';
-import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { getActionNarrative, getAgentLabel } from '@/lib/demoNarrative';
 import type { AccessRequest } from './AccessRequestToast';
@@ -10,15 +8,11 @@ import type { AccessRequest } from './AccessRequestToast';
  * No tier/policy engine exists anywhere in the backend yet (CapabilityRegistry's
  * Tier enum is written but unwired). So this doesn't claim a trust tier the
  * user hasn't actually earned yet — it states the one real fact: the request
- * needs a human confirmation before it can run.
+ * needs a human confirmation before it can run. Auto-advances (see
+ * /request/page.tsx) instead of waiting on a click — there's no new decision
+ * for the user to make here, just a beat worth showing before confirmation.
  */
-export function TierPolicyResult({
-  request,
-  onContinue,
-}: {
-  request: AccessRequest;
-  onContinue: () => void;
-}) {
+export function TierPolicyResult({ request }: { request: AccessRequest }) {
   const narrative = getActionNarrative(request.secretIdentifier);
   const agentLabel = getAgentLabel(request.agentAddress);
 
@@ -53,9 +47,13 @@ export function TierPolicyResult({
         </div>
       </div>
 
-      <Button variant="primary" icon={ArrowRight02Icon} iconPosition="trailing" onClick={onContinue}>
-        Continue to confirmation
-      </Button>
+      <p className="flex items-center gap-2 text-sm text-(--dark-300)">
+        <span
+          aria-hidden="true"
+          className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-(--dark-50) border-t-(--purple-500)"
+        />
+        Continuing to confirmation...
+      </p>
     </Card>
   );
 }

@@ -19,11 +19,11 @@ const reasonCopy: Record<'user_denied' | 'expired', { heading: string; body: str
 export function DeniedExpired({
   request,
   reason,
-  onBack,
+  onContinue,
 }: {
   request: AccessRequest;
   reason: 'user_denied' | 'expired';
-  onBack: () => void;
+  onContinue: () => void;
 }) {
   const narrative = getActionNarrative(request.secretIdentifier);
   const copy = reasonCopy[reason];
@@ -44,10 +44,10 @@ export function DeniedExpired({
 
       <button
         type="button"
-        onClick={onBack}
+        onClick={onContinue}
         className="mt-10 inline-flex min-w-56 items-center justify-center gap-2 rounded-full bg-(--purple-500) px-6 py-4 text-sm font-semibold text-white transition hover:bg-[#6b4fe6]"
       >
-        Back to requests
+        Continue
         <HugeiconsIcon icon={ArrowRight02Icon} size={18} strokeWidth={1.5} />
       </button>
     </div>

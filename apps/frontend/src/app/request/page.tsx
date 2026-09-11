@@ -83,12 +83,19 @@ export default function RequestPage() {
     window.setTimeout(() => setStage('policy_result'), 500);
   }
 
+  // No new decision happens on the policy-result screen (no real tier/policy
+  // engine to wait on) — it auto-advances into confirmation after a beat
+  // instead of making the user click through a screen with nothing to decide.
+  useEffect(() => {
+    if (stage !== 'policy_result') {
+      return;
+    }
+    const timeout = window.setTimeout(() => setStage('confirmation'), 1_600);
+    return () => window.clearTimeout(timeout);
+  }, [stage]);
+
   function handleCancel() {
     router.push('/agents');
-  }
-
-  function handleContinueToConfirmation() {
-    setStage('confirmation');
   }
 
   function handleApproved(txHash: `0x${string}`) {
@@ -101,8 +108,8 @@ export default function RequestPage() {
     setStage('denied');
   }
 
-  function handleReset() {
-    router.push('/agents');
+  function handleContinueToArchitecture() {
+    router.push('/architecture');
   }
 
   return (
@@ -124,13 +131,13 @@ export default function RequestPage() {
           onCancel={handleCancel}
         />
       ) : stage === 'policy_result' ? (
-        <TierPolicyResult request={displayRequest} onContinue={handleContinueToConfirmation} />
+        <TierPolicyResult request={displayRequest} />
       ) : stage === 'confirmation' ? (
         <HumanConfirmation request={displayRequest} onApproved={handleApproved} onDenied={handleDenied} />
       ) : stage === 'approved' && approvedTxHash !== null ? (
-        <GrantedHighRisk request={displayRequest} txHash={approvedTxHash} onDone={handleReset} />
+        <GrantedHighRisk request={displayRequest} txHash={approvedTxHash} onContinue={handleContinueToArchitecture} />
       ) : stage === 'denied' && deniedReason !== null ? (
-        <DeniedExpired request={displayRequest} reason={deniedReason} onBack={handleReset} />
+        <DeniedExpired request={displayRequest} reason={deniedReason} onContinue={handleContinueToArchitecture} />
       ) : null}
 
       <Link
