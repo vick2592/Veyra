@@ -120,7 +120,7 @@ export default function Home() {
       <div className="mt-10 flex flex-col items-end gap-2">
         {canContinue ? (
           <Link
-            href="/sandbox"
+            href="/request"
             className="inline-flex min-w-56 items-center justify-center gap-2 rounded-full bg-(--purple-500) px-6 py-4 text-sm font-semibold text-white transition hover:bg-[#6b4fe6]"
           >
             Continue

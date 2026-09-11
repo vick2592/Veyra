@@ -5,7 +5,10 @@ import Link from 'next/link';
 import { AccessRequestToast, type AccessRequest } from '@/components/request/AccessRequestToast';
 import { TierPolicyResult } from '@/components/request/TierPolicyResult';
 import { HumanConfirmation } from '@/components/request/HumanConfirmation';
+import { GrantedHighRisk } from '@/components/request/GrantedHighRisk';
+import { DeniedExpired } from '@/components/request/DeniedExpired';
 import { Card } from '@/components/ui/Card';
+import { SplitScreenShell } from '@/components/ui/SplitScreenShell';
 
 type PendingRequest = AccessRequest & {
   status: 'pending_human_auth' | 'executing' | 'completed' | 'failed';
@@ -107,63 +110,36 @@ export default function RequestPage() {
   }
 
   return (
-    <main className="min-h-screen bg-(--creame) px-6 py-6 sm:px-10">
-      <header className="flex items-center gap-3">
-        <div style={{ width: 28, height: 24 }}>
-          <img src="/veyra-mark.svg" alt="Veyra" className="h-full w-full object-contain" />
-        </div>
-        <span className="text-lg font-semibold text-(--dark-400)">Veyra</span>
-      </header>
+    <SplitScreenShell>
+      {displayRequest === undefined || displayRequest === null ? (
+        <Card>
+          <p className="text-sm leading-6 text-(--dark-300)">
+            {loadError ?? 'No pending requests. Waiting for an agent to submit one.'}
+          </p>
+        </Card>
+      ) : stage === 'toast' || stage === 'evaluating' ? (
+        <AccessRequestToast
+          request={displayRequest}
+          isEvaluating={stage === 'evaluating'}
+          onEvaluate={handleEvaluate}
+          onCancel={handleCancel}
+        />
+      ) : stage === 'policy_result' ? (
+        <TierPolicyResult request={displayRequest} onContinue={handleContinueToConfirmation} />
+      ) : stage === 'confirmation' ? (
+        <HumanConfirmation request={displayRequest} onApproved={handleApproved} onDenied={handleDenied} />
+      ) : stage === 'approved' && approvedTxHash !== null ? (
+        <GrantedHighRisk request={displayRequest} txHash={approvedTxHash} onDone={handleReset} />
+      ) : stage === 'denied' && deniedReason !== null ? (
+        <DeniedExpired request={displayRequest} reason={deniedReason} onBack={handleReset} />
+      ) : null}
 
-      <div className="mx-auto mt-16 max-w-xl">
-        {displayRequest === undefined || displayRequest === null ? (
-          <Card>
-            <p className="text-sm leading-6 text-(--dark-300)">
-              {loadError ?? 'No pending requests. Waiting for an agent to submit one.'}
-            </p>
-          </Card>
-        ) : stage === 'toast' || stage === 'evaluating' ? (
-          <AccessRequestToast
-            request={displayRequest}
-            isEvaluating={stage === 'evaluating'}
-            onEvaluate={handleEvaluate}
-            onCancel={handleCancel}
-          />
-        ) : stage === 'policy_result' ? (
-          <TierPolicyResult request={displayRequest} onContinue={handleContinueToConfirmation} />
-        ) : stage === 'confirmation' ? (
-          <HumanConfirmation request={displayRequest} onApproved={handleApproved} onDenied={handleDenied} />
-        ) : stage === 'approved' ? (
-          <Card>
-            <p className="text-sm leading-6 text-(--dark-300)">
-              Approved. Transaction: <span className="font-mono text-xs">{approvedTxHash}</span>
-              <br />
-              The Granted: High Risk screen for this request is next.
-            </p>
-            <button type="button" onClick={handleReset} className="mt-4 text-xs font-semibold text-(--purple-500)">
-              Back to requests
-            </button>
-          </Card>
-        ) : (
-          <Card>
-            <p className="text-sm leading-6 text-(--dark-300)">
-              {deniedReason === 'expired' ? 'Confirmation expired.' : 'Request denied.'}
-              <br />
-              The Denied / Expired screen for this request is next.
-            </p>
-            <button type="button" onClick={handleReset} className="mt-4 text-xs font-semibold text-(--purple-500)">
-              Back to requests
-            </button>
-          </Card>
-        )}
-
-        <Link
-          href="/sandbox"
-          className="mt-6 block text-center text-xs text-(--dark-300) underline underline-offset-4 hover:text-(--dark-400)"
-        >
-          Open developer sandbox
-        </Link>
-      </div>
-    </main>
+      <Link
+        href="/sandbox"
+        className="mt-6 block text-center text-xs text-(--dark-300) underline underline-offset-4 hover:text-(--dark-400)"
+      >
+        Open developer sandbox
+      </Link>
+    </SplitScreenShell>
   );
 }
