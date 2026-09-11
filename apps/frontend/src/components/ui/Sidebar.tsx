@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useAccount, useDisconnect } from 'wagmi';
 import { HugeiconsIcon } from '@hugeicons/react';
 import type { IconSvgElement } from '@hugeicons/react';
-import { Pulse01Icon, Robot01Icon, ShareKnowledgeIcon, Wrench01Icon } from '@hugeicons/core-free-icons';
+import { Logout03Icon, LockKeyIcon, Pulse01Icon, Robot01Icon, Wrench01Icon } from '@hugeicons/core-free-icons';
 
 type NavItem = {
   href: string;
@@ -14,6 +15,7 @@ type NavItem = {
 
 const topNavItems: NavItem[] = [
   { href: '/agents', icon: Robot01Icon, label: 'Agents' },
+  { href: '/secrets', icon: LockKeyIcon, label: 'Secrets' },
   { href: '/activity', icon: Pulse01Icon, label: 'Activity' },
 ];
 
@@ -35,12 +37,15 @@ function RailButton({ item, isActive }: { item: NavItem; isActive: boolean }) {
 
 /**
  * Full-height left column: logo + nav rail together, not a full-width header
- * with a floating rail underneath. Bottom-right icon's product meaning was
- * never specified by the team, so it's left inert rather than guessed —
- * wrench (Settings) is the one confirmed mapping.
+ * with a floating rail underneath. Bottom-right icon is a real disconnect
+ * action (confirmed by the user 2026-09-12) — a second disconnect control
+ * alongside the top bar's wallet-chip one, superseding the earlier
+ * one-disconnect-control design note.
  */
 export function Sidebar() {
   const pathname = usePathname();
+  const { isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
 
   return (
     <aside className="sticky top-0 hidden h-screen w-24 shrink-0 flex-col items-center gap-8 py-6 sm:flex">
@@ -65,12 +70,13 @@ export function Sidebar() {
           />
           <button
             type="button"
-            aria-label="More options, coming soon"
-            title="Coming soon"
-            disabled
-            className="flex h-11 w-11 items-center justify-center rounded-xl text-(--dark-100)"
+            onClick={() => disconnect()}
+            disabled={!isConnected}
+            aria-label="Disconnect wallet"
+            title="Disconnect wallet"
+            className="flex h-11 w-11 items-center justify-center rounded-xl text-(--dark-400) transition hover:bg-(--dark-50) disabled:text-(--dark-100)"
           >
-            <HugeiconsIcon icon={ShareKnowledgeIcon} size={20} strokeWidth={1.5} />
+            <HugeiconsIcon icon={Logout03Icon} size={20} strokeWidth={1.5} />
           </button>
         </div>
       </nav>

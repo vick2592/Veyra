@@ -13,26 +13,18 @@ import { useAccount, useConnect } from 'wagmi';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { SplitScreenShell } from '@/components/ui/SplitScreenShell';
-
-type SecretState = 'empty' | 'creating' | 'created';
+import { useCreateSecret } from '@/hooks/useCreateSecret';
 
 export default function Home() {
   const { address, isConnected } = useAccount();
   const { connect, connectors, status: connectStatus } = useConnect();
   const [secretName, setSecretName] = useState('');
-  const [secretState, setSecretState] = useState<SecretState>('empty');
+  const { state: secretState, errorMessage, createSecret, reset: resetSecret } = useCreateSecret();
 
   const isConnecting = connectStatus === 'pending';
-  const canCreateSecret = isConnected && secretName.trim().length > 0 && secretState !== 'creating';
-  const canContinue = isConnected && secretState === 'created';
-
-  function handleCreateSecret() {
-    if (!canCreateSecret) {
-      return;
-    }
-    setSecretState('creating');
-    window.setTimeout(() => setSecretState('created'), 450);
-  }
+  const isBusy = secretState === 'registering' || secretState === 'storing';
+  const canCreateSecret = isConnected && secretName.trim().length > 0 && !isBusy;
+  const canContinue = isConnected && secretState === 'done';
 
   return (
     <SplitScreenShell>
@@ -73,7 +65,7 @@ export default function Home() {
 
         <Card className="flex flex-col gap-4">
           <div className="flex items-center gap-3">
-            <StepBadge index={2} complete={secretState === 'created'} />
+            <StepBadge index={2} complete={secretState === 'done'} />
             <label htmlFor="secret-name" className="text-base font-medium text-(--dark-400)">
               Name this secret
             </label>
@@ -86,27 +78,31 @@ export default function Home() {
               value={secretName}
               onChange={(event) => {
                 setSecretName(event.target.value);
-                if (secretState === 'created') {
-                  setSecretState('empty');
+                if (secretState === 'done' || secretState === 'error') {
+                  resetSecret();
                 }
               }}
-              disabled={!isConnected || secretState === 'creating'}
+              disabled={!isConnected || isBusy}
               placeholder="openai-key"
               className="flex-1 rounded-full border border-(--dark-50) bg-white px-5 py-4 text-sm text-(--dark-400) placeholder:text-(--dark-100) focus:border-(--purple-500) focus:outline-none disabled:bg-(--dark-50)/30"
             />
             <Button
               variant="secondary"
               icon={LockKeyIcon}
-              loading={secretState === 'creating'}
-              loadingLabel="Creating..."
+              loading={isBusy}
+              loadingLabel={secretState === 'registering' ? 'Registering...' : 'Creating...'}
               disabled={!canCreateSecret}
-              onClick={handleCreateSecret}
+              onClick={() => void createSecret(secretName)}
             >
               Create secret
             </Button>
           </div>
 
-          {secretState === 'created' && (
+          {secretState === 'error' && errorMessage !== null && (
+            <p className="pl-11 text-sm text-(--dark-400)">{errorMessage}</p>
+          )}
+
+          {secretState === 'done' && (
             <p className="pl-11 text-sm text-(--dark-300)">
               Secret created. Market Agent can now request access to it.
             </p>

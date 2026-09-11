@@ -9,20 +9,83 @@ import type { IDKitResult } from '@worldcoin/idkit';
 
 export const registryAddress = process.env.NEXT_PUBLIC_REGISTRY_ADDRESS as `0x${string}` | undefined;
 
-export const registryAbi = [{
-  type: 'function',
-  name: 'authorizeAgent',
-  stateMutability: 'nonpayable',
-  inputs: [
-    { name: 'agentAddress', type: 'address' },
-    { name: 'secretId', type: 'bytes32' },
-    { name: 'root', type: 'uint256' },
-    { name: 'nullifierHash', type: 'uint256' },
-    { name: 'proof', type: 'uint256[8]' },
-    { name: 'requestId', type: 'bytes32' },
-  ],
-  outputs: [],
-}] as const;
+export const registryAbi = [
+  {
+    type: 'function',
+    name: 'authorizeAgent',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'agentAddress', type: 'address' },
+      { name: 'secretId', type: 'bytes32' },
+      { name: 'root', type: 'uint256' },
+      { name: 'nullifierHash', type: 'uint256' },
+      { name: 'proof', type: 'uint256[8]' },
+      { name: 'requestId', type: 'bytes32' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'registerUser',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'encryptedUserId', type: 'bytes' },
+      { name: 'leafIndex', type: 'uint32' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'isRegistered',
+    stateMutability: 'view',
+    inputs: [{ name: 'user', type: 'address' }],
+    outputs: [{ type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'storeSecret',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'secretId', type: 'bytes32' },
+      { name: 'label', type: 'string' },
+      { name: 'ciphertext', type: 'bytes' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'revokeSecret',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'secretId', type: 'bytes32' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'getSecret',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'user', type: 'address' },
+      { name: 'secretId', type: 'bytes32' },
+    ],
+    outputs: [{
+      type: 'tuple',
+      components: [
+        { name: 'ciphertext', type: 'bytes' },
+        { name: 'label', type: 'string' },
+        { name: 'version', type: 'uint32' },
+        { name: 'storedAt', type: 'uint64' },
+        { name: 'active', type: 'bool' },
+      ],
+    }],
+  },
+  {
+    type: 'function',
+    name: 'secretIdsOf',
+    stateMutability: 'view',
+    inputs: [{ name: 'user', type: 'address' }],
+    outputs: [{ type: 'bytes32[]' }],
+  },
+] as const;
 
 export type OnChainProof = {
   root: string;
@@ -105,4 +168,29 @@ export function getOnChainProof(result: IDKitResult): OnChainProof {
 
 export function getSimulatorUrl(connectorURI: string): string {
   return `https://simulator.worldcoin.org?connect_url=${encodeURIComponent(connectorURI)}`;
+}
+
+const LEAF_INDEX_SPACE = 0x8000_0000; // 31-bit, non-hardened BIP32 range — mirrors backend's derive.ts
+
+/**
+ * `registerUser`/`storeSecret` need a leaf index and ciphertext, but only
+ * the Ledger-holding server can produce real ones (see step-3 finding in
+ * memory). The team's own `VEYRA_DEMO_MODE` fallback (apps/backend/src/
+ * keyring.ts) already establishes that mock ciphertext is fine for this
+ * build — execution reads straight from the backend's own env-configured
+ * key regardless of what's stored on chain. So these are real on-chain
+ * writes with placeholder payloads, not fabricated UI — the contract only
+ * checks that the bytes are non-empty, never their content.
+ */
+export function deriveLeafIndex(address: `0x${string}`): number {
+  const digest = keccak256(toBytes(address.toLowerCase()));
+  return Number(BigInt(digest) % BigInt(LEAF_INDEX_SPACE));
+}
+
+export function getMockEncryptedUserId(address: `0x${string}`): `0x${string}` {
+  return keccak256(encodePacked(['string', 'address'], ['veyra-demo-user', address]));
+}
+
+export function getMockCiphertext(secretName: string, ownerAddress: `0x${string}`): `0x${string}` {
+  return keccak256(encodePacked(['string', 'string', 'address'], ['veyra-demo-secret', secretName, ownerAddress]));
 }
