@@ -3,11 +3,14 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AccessRequestToast, type AccessRequest } from '@/components/request/AccessRequestToast';
+import { TierPolicyResult } from '@/components/request/TierPolicyResult';
 import { Card } from '@/components/ui/Card';
 
 type PendingRequest = AccessRequest & {
   status: 'pending_human_auth' | 'executing' | 'completed' | 'failed';
 };
+
+type FlowStage = 'toast' | 'evaluating' | 'policy_result' | 'confirmation_pending';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 
@@ -23,8 +26,7 @@ async function fetchPendingRequests(signal?: AbortSignal): Promise<PendingReques
 export default function RequestPage() {
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
-  const [isEvaluating, setIsEvaluating] = useState(false);
-  const [isEvaluated, setIsEvaluated] = useState(false);
+  const [stage, setStage] = useState<FlowStage>('toast');
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -59,16 +61,17 @@ export default function RequestPage() {
   const selectedRequest = pendingRequests.find((request) => request.requestId === selectedRequestId);
 
   function handleEvaluate() {
-    setIsEvaluating(true);
-    window.setTimeout(() => {
-      setIsEvaluating(false);
-      setIsEvaluated(true);
-    }, 500);
+    setStage('evaluating');
+    window.setTimeout(() => setStage('policy_result'), 500);
   }
 
   function handleCancel() {
     setSelectedRequestId(null);
-    setIsEvaluated(false);
+    setStage('toast');
+  }
+
+  function handleContinueToConfirmation() {
+    setStage('confirmation_pending');
   }
 
   return (
@@ -87,19 +90,21 @@ export default function RequestPage() {
               {loadError ?? 'No pending requests. Waiting for an agent to submit one.'}
             </p>
           </Card>
-        ) : isEvaluated ? (
-          <Card>
-            <p className="text-sm leading-6 text-(--dark-300)">
-              Request evaluated. The Tier &amp; Policy Result screen for this request is next.
-            </p>
-          </Card>
-        ) : (
+        ) : stage === 'toast' || stage === 'evaluating' ? (
           <AccessRequestToast
             request={selectedRequest}
-            isEvaluating={isEvaluating}
+            isEvaluating={stage === 'evaluating'}
             onEvaluate={handleEvaluate}
             onCancel={handleCancel}
           />
+        ) : stage === 'policy_result' ? (
+          <TierPolicyResult request={selectedRequest} onContinue={handleContinueToConfirmation} />
+        ) : (
+          <Card>
+            <p className="text-sm leading-6 text-(--dark-300)">
+              The Human Confirmation screen for this request is next.
+            </p>
+          </Card>
         )}
 
         <Link
