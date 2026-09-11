@@ -34,16 +34,22 @@ export function getSecretId(secretIdentifier: string): `0x${string}` {
   return keccak256(toBytes(secretIdentifier));
 }
 
+/**
+ * Returns the raw packed hex, not a pre-hashed digest — idkit hashes the
+ * signal itself to match what the contract independently recomputes
+ * (`keccak256(...) >> 8` in authorizeAgent). Pre-hashing here double-hashed
+ * it and produced proofs that verified against the wrong signal. Matches
+ * the fix landed in /sandbox on 2026-09-11 (commit ea401e5).
+ */
 export function getWorldIdSignal(
   userAddress: `0x${string}`,
   agentAddress: `0x${string}`,
   secretId: `0x${string}`,
 ): string {
-  const digest = keccak256(encodePacked(
+  return encodePacked(
     ['address', 'address', 'bytes32'],
     [userAddress, agentAddress, secretId],
-  ));
-  return (BigInt(digest) >> BigInt(8)).toString();
+  );
 }
 
 export function getOnChainProof(result: IDKitResult): OnChainProof {
