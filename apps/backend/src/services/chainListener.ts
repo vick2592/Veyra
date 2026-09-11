@@ -56,9 +56,13 @@ export function createChainListener(
   const seenLogs = new Set<string>();
   const processingLogs = new Set<string>();
   let client: PublicClient | undefined = dependencies.client;
-  let unwatch: (() => void) | undefined;
-  let restartTimer: ReturnType<typeof setTimeout> | undefined;
+  let pollTimer: ReturnType<typeof setInterval> | undefined;
+  let polling = false;
+  let lastPolledBlock: bigint | undefined;
   let stopped = true;
+
+  /** How many blocks back to scan on each poll. Tight range avoids heavy RPC load. */
+  const BLOCK_SCAN_WINDOW = 10n;
 
   function getClient(): PublicClient {
     if (client !== undefined) {
@@ -156,44 +160,60 @@ export function createChainListener(
     }
   }
 
-  function scheduleRestart(): void {
-    if (stopped || restartTimer !== undefined) {
+  /**
+   * Poll for new logs using getLogs over a tight block range.
+   * This avoids stateful eth_newFilter/eth_getFilterChanges which break
+   * across load-balanced public RPC nodes.
+   */
+  async function pollForLogs(): Promise<void> {
+    if (polling || stopped) {
       return;
     }
-
-    restartTimer = setTimeout(() => {
-      restartTimer = undefined;
-      startWatching();
-    }, config.pollingIntervalMs);
-  }
-
-  function startWatching(): void {
-    if (stopped || unwatch !== undefined) {
-      return;
-    }
+    polling = true;
 
     try {
-      unwatch = getClient().watchEvent({
+      const c = getClient();
+      const latestBlock = await c.getBlockNumber();
+
+      // Determine fromBlock: on first poll, use config.startingBlock or latest - window.
+      // On subsequent polls, start from lastPolledBlock (no re-scan beyond window).
+      let fromBlock: bigint;
+      if (lastPolledBlock === undefined) {
+        fromBlock = config.startingBlock ?? latestBlock - BLOCK_SCAN_WINDOW;
+        if (fromBlock < 0n) {
+          fromBlock = 0n;
+        }
+      } else {
+        fromBlock = lastPolledBlock;
+        // Don't scan more than BLOCK_SCAN_WINDOW behind latest to stay bounded
+        const minFrom = latestBlock - BLOCK_SCAN_WINDOW;
+        if (fromBlock < minFrom) {
+          fromBlock = minFrom;
+        }
+      }
+
+      if (fromBlock > latestBlock) {
+        // No new blocks yet
+        return;
+      }
+
+      const logs = await c.getLogs({
         address: config.registryAddress,
         event: agentAuthorizedAbi[0],
-        fromBlock: config.startingBlock,
-        onLogs: (logs) => {
-          for (const log of logs) {
-            void handleLog(log as AuthorizedLog);
-          }
-        },
-        onError: (error) => {
-          logger.error('Chain listener watch failed', error);
-          unwatch?.();
-          unwatch = undefined;
-          scheduleRestart();
-        },
+        fromBlock,
+        toBlock: latestBlock,
       });
-      logger.info('Chain listener started', { registryAddress: config.registryAddress });
+
+      // Advance our cursor to the latest block we've scanned
+      lastPolledBlock = latestBlock + 1n;
+
+      for (const log of logs) {
+        void handleLog(log as unknown as AuthorizedLog);
+      }
     } catch (error) {
-      logger.error('Chain listener startup failed', error);
-      unwatch = undefined;
-      scheduleRestart();
+      logger.error('Chain listener poll failed', error);
+    } finally {
+      polling = false;
     }
   }
 
@@ -202,17 +222,25 @@ export function createChainListener(
       return;
     }
     stopped = false;
-    startWatching();
+    lastPolledBlock = undefined;
+    pollTimer = setInterval(() => {
+      void pollForLogs();
+    }, config.pollingIntervalMs);
+    // Also do an immediate first poll
+    void pollForLogs();
+    logger.info('Chain listener started (block-poll mode)', {
+      registryAddress: config.registryAddress,
+      pollingIntervalMs: config.pollingIntervalMs,
+      blockScanWindow: BLOCK_SCAN_WINDOW.toString(),
+    });
   }
 
   function stop(): void {
     stopped = true;
-    if (restartTimer !== undefined) {
-      clearTimeout(restartTimer);
-      restartTimer = undefined;
+    if (pollTimer !== undefined) {
+      clearInterval(pollTimer);
+      pollTimer = undefined;
     }
-    unwatch?.();
-    unwatch = undefined;
   }
 
   return {start, stop};
