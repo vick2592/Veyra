@@ -157,6 +157,9 @@ export default function SandboxPage() {
   const [executionStatus, setExecutionStatus] = useState<PendingRequest['status'] | null>(null);
   const [executionResult, setExecutionResult] = useState<unknown>(null);
   const [executionError, setExecutionError] = useState<{code?: string; message: string} | null>(null);
+  const [activeExecutionRequestId, setActiveExecutionRequestId] = useState<string | null>(null);
+  const activeExecutionRequestIdRef = useRef<string | null>(null);
+  activeExecutionRequestIdRef.current = activeExecutionRequestId;
   const proofCandidate = useRef<OnChainProof | null>(null);
   const {address, isConnected} = useAccount();
   const {connect, connectors} = useConnect();
@@ -183,12 +186,21 @@ export default function SandboxPage() {
         const requests = await fetchPendingRequests(controller.signal);
         setPendingRequests(requests);
         setSelectedRequestId((currentId) => {
+          // If an execution is actively being polled, preserve the selection
+          // so the UI keeps showing the request context even after the backend
+          // claims it and removes it from the pending queue.
+          if (currentId !== null && activeExecutionRequestIdRef.current !== null && currentId === activeExecutionRequestIdRef.current) {
+            return currentId;
+          }
           if (currentId !== null && requests.some((request) => request.requestId === currentId)) {
             return currentId;
           }
           return null;
         });
         setSelectedSecretIdentifier((currentIdentifier) => {
+          if (currentIdentifier !== null && activeExecutionRequestIdRef.current !== null) {
+            return currentIdentifier;
+          }
           if (currentIdentifier !== null && requests.some((request) => request.secretIdentifier === currentIdentifier)) {
             return currentIdentifier;
           }
@@ -221,6 +233,7 @@ export default function SandboxPage() {
     let active = true;
     setAuthorizationState('polling_execution');
     setExecutionStatus('executing');
+    setActiveExecutionRequestId(selectedRequestId);
     setMessage('Authorization confirmed. Waiting for the chain listener to execute the capability...');
 
     async function pollExecutionStatus() {
@@ -247,11 +260,13 @@ export default function SandboxPage() {
           setExecutionResult(request.result);
           setExecutionError(null);
           setAuthorizationState('success');
+          setActiveExecutionRequestId(null);
           setMessage('Capability completed. The final provider result is ready.');
         } else if (request.status === 'failed') {
           setExecutionResult(null);
           setExecutionError(request.error ?? {message: 'The capability execution failed.'});
           setAuthorizationState('error');
+          setActiveExecutionRequestId(null);
           setMessage(request.error?.message ?? 'The capability execution failed.');
         } else {
           setMessage('Authorization confirmed. The chain listener is executing the capability...');
