@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
 import {
   deriveLeafIndex,
@@ -25,12 +25,24 @@ export function useCreateSecret() {
   const publicClient = usePublicClient();
   const [state, setState] = useState<CreateSecretState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Synchronous guard — setState('registering') only lands after the first
+  // awaited call, leaving a window where a fast double-click/double-submit
+  // would fire this twice concurrently before React re-renders the disabled
+  // button. This closes it regardless of render timing.
+  const isSubmittingRef = useRef(false);
 
   async function createSecret(name: string): Promise<boolean> {
     const trimmed = name.trim();
-    if (trimmed.length === 0 || address === undefined || publicClient === undefined || registryAddress === undefined) {
+    if (
+      trimmed.length === 0 ||
+      address === undefined ||
+      publicClient === undefined ||
+      registryAddress === undefined ||
+      isSubmittingRef.current
+    ) {
       return false;
     }
+    isSubmittingRef.current = true;
     setErrorMessage(null);
     try {
       const isRegistered = await publicClient.readContract({
@@ -65,12 +77,15 @@ export function useCreateSecret() {
       setState('error');
       setErrorMessage(error instanceof Error ? error.message : 'The secret could not be created.');
       return false;
+    } finally {
+      isSubmittingRef.current = false;
     }
   }
 
   function reset() {
     setState('idle');
     setErrorMessage(null);
+    isSubmittingRef.current = false;
   }
 
   return { state, errorMessage, createSecret, reset };
