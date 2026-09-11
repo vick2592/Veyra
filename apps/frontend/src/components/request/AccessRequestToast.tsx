@@ -38,7 +38,7 @@ export function AccessRequestToast({
       </div>
 
       <p className="text-sm leading-6 text-(--dark-300)">
-        An agent wants to do something on your behalf. Review it, then decide.
+        {agentLabel} has access to your <span className="font-mono">{request.secretIdentifier}</span> secret and wants to do something on your behalf. Review it, then decide.
       </p>
 
       <div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { AccessRequestToast, type AccessRequest } from '@/components/request/AccessRequestToast';
 import { TierPolicyResult } from '@/components/request/TierPolicyResult';
 import { HumanConfirmation } from '@/components/request/HumanConfirmation';
@@ -28,6 +29,7 @@ async function fetchPendingRequests(signal?: AbortSignal): Promise<PendingReques
 }
 
 export default function RequestPage() {
+  const router = useRouter();
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [stage, setStage] = useState<FlowStage>('toast');
@@ -82,9 +84,7 @@ export default function RequestPage() {
   }
 
   function handleCancel() {
-    setSelectedRequestId(null);
-    setActiveRequest(null);
-    setStage('toast');
+    router.push('/agents');
   }
 
   function handleContinueToConfirmation() {
@@ -102,20 +102,19 @@ export default function RequestPage() {
   }
 
   function handleReset() {
-    setSelectedRequestId(null);
-    setActiveRequest(null);
-    setApprovedTxHash(null);
-    setDeniedReason(null);
-    setStage('toast');
+    router.push('/agents');
   }
 
   return (
     <SplitScreenShell>
       {displayRequest === undefined || displayRequest === null ? (
-        <Card>
+        <Card className="flex flex-col gap-3">
           <p className="text-sm leading-6 text-(--dark-300)">
-            {loadError ?? 'No pending requests. Waiting for an agent to submit one.'}
+            {loadError ?? 'No pending requests right now.'}
           </p>
+          <Link href="/agents" className="text-sm font-semibold text-(--purple-500)">
+            Back to agents
+          </Link>
         </Card>
       ) : stage === 'toast' || stage === 'evaluating' ? (
         <AccessRequestToast

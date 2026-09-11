@@ -108,7 +108,7 @@ export default function Home() {
 
           {secretState === 'created' && (
             <p className="pl-11 text-sm text-(--dark-300)">
-              Secret created. Your agent can now request access to it.
+              Secret created. Market Agent can now request access to it.
             </p>
           )}
           {!isConnected && (
@@ -120,7 +120,7 @@ export default function Home() {
       <div className="mt-10 flex flex-col items-end gap-2">
         {canContinue ? (
           <Link
-            href="/request"
+            href="/agents"
             className="inline-flex min-w-56 items-center justify-center gap-2 rounded-full bg-(--purple-500) px-6 py-4 text-sm font-semibold text-white transition hover:bg-[#6b4fe6]"
           >
             Continue

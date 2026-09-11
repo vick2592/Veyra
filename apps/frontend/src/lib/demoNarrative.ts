@@ -43,3 +43,15 @@ const demoAgentLabels: Record<string, string> = {
 export function getAgentLabel(agentAddress: string): string {
   return demoAgentLabels[agentAddress.toLowerCase()] ?? `${agentAddress.slice(0, 6)}...${agentAddress.slice(-4)}`;
 }
+
+/**
+ * The demo's one agent + the secret it's scoped to. There is no real
+ * "register an agent" mechanism anywhere in the contracts (VeyraRegistry has
+ * no such function; CapabilityRegistry only revokes/reinstates) — any
+ * address can call the Bazantic API, trust is established per-request via
+ * World ID + a wallet signature, not via a pre-approved roster. These
+ * constants exist so the Agents page can trigger a real request for this
+ * one demo agent, same as /sandbox's "Simulate Agent Request" button.
+ */
+export const DEMO_AGENT_ADDRESS = '0x0000000000000000000000000000000000000001';
+export const DEMO_SECRET_IDENTIFIER = 'openai-key';
