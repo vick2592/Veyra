@@ -39,3 +39,31 @@ body {
   color: var(--dark-400);
   font-family: var(--font-host-grotesk), 'Host Grotesk', ui-sans-serif, system-ui, sans-serif;
 }
+
+/* Slow ambient drift for the landing page's background glow — subtle on
+   purpose (very low opacity at the call site), disabled entirely for anyone
+   who's asked their OS to reduce motion. */
+@keyframes veyra-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(4%, -5%) scale(1.08); }
+}
+
+@keyframes veyra-drift-reverse {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-5%, 4%) scale(1.06); }
+}
+
+.animate-veyra-drift {
+  animation: veyra-drift 22s ease-in-out infinite;
+}
+
+.animate-veyra-drift-slow {
+  animation: veyra-drift-reverse 28s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-veyra-drift,
+  .animate-veyra-drift-slow {
+    animation: none;
+  }
+}

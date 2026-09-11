@@ -51,8 +51,13 @@ const steps: Step[] = [
 
 export default function LandingPage() {
   return (
-    <main className="bg-(--creame)">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6 sm:px-10">
+    <main className="relative bg-(--creame)">
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div className="animate-veyra-drift absolute -left-40 top-[-10%] h-[560px] w-[560px] rounded-full bg-(--purple-500)/10 blur-3xl" />
+        <div className="animate-veyra-drift-slow absolute -right-40 top-1/3 h-[600px] w-[600px] rounded-full bg-(--blue-500)/10 blur-3xl" />
+      </div>
+
+      <header className="relative mx-auto flex max-w-6xl items-center justify-between px-6 py-6 sm:px-10">
         <Link href="/" className="flex items-center gap-3">
           <div style={{ width: 28, height: 24 }}>
             <img src="/veyra-mark.svg" alt="Veyra" className="h-full w-full object-contain" />
@@ -67,8 +72,8 @@ export default function LandingPage() {
         </Link>
       </header>
 
-      <section className="mx-auto max-w-6xl px-6 pb-20 pt-6 sm:px-10">
-        <div className="grid gap-10 lg:grid-cols-2 lg:items-center lg:gap-16">
+      <section className="relative mx-auto flex min-h-screen max-w-6xl items-center px-6 py-16 sm:px-10">
+        <div className="grid w-full gap-10 lg:grid-cols-2 lg:items-center lg:gap-16">
           <div>
             <span className="inline-flex items-center rounded-full border border-(--dark-50) px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-(--dark-300)">
               Agent Capability Broker
@@ -99,8 +104,8 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div className="relative aspect-square overflow-hidden rounded-[32px] bg-(--dark-500) lg:aspect-auto lg:h-[440px]">
-            <img src="/hero-trust.png" alt="" className="absolute inset-0 h-full w-full object-cover" />
+          <div className="relative aspect-square overflow-hidden rounded-[32px] bg-(--dark-500) lg:aspect-auto lg:h-[480px]">
+            <img src="/hero-trust.png" alt="" className="absolute inset-0 h-full w-full object-contain p-10 sm:p-14" />
           </div>
         </div>
       </section>

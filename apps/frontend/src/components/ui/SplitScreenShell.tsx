@@ -15,20 +15,14 @@ export function SplitScreenShell({ heroImage, children }: SplitScreenShellProps)
       <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-[1920px] flex-col gap-4 lg:flex-row">
         <div className="relative flex-1 overflow-hidden rounded-[32px] bg-(--dark-500) lg:max-w-[47%]">
           {heroImage !== undefined ? (
-            <>
-              <img
-                src={heroImage}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover"
-              />
-              {/* Real photos vary in tone — this keeps the white logo/wordmark
-                  legible regardless of what sits behind it, unlike the
-                  gradient-only treatment which was already dark by design. */}
-              <div
-                aria-hidden="true"
-                className="absolute inset-0 bg-gradient-to-b from-black/55 via-transparent to-black/25"
-              />
-            </>
+            // Contained, not cropped full-bleed — the dark-500 background stays
+            // visibly the frame around the image instead of being hidden behind
+            // it, and the logo sits on pure dark background either way.
+            <img
+              src={heroImage}
+              alt=""
+              className="absolute inset-0 h-full w-full object-contain p-10 sm:p-14"
+            />
           ) : (
             <div
               aria-hidden="true"
