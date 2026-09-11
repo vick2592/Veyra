@@ -43,20 +43,19 @@ export default function Home() {
         Give your agent a scoped key, not a raw one.
       </h1>
       <p className="mt-5 max-w-md text-base leading-7 text-(--dark-300)">
-        Connect your wallet, then create a secret your agent can request — never hold directly.
+        Connect your wallet, then create a secret your agent can request access to — it never holds the raw value.
       </p>
 
       <div className="mt-10 flex flex-col gap-4">
         <Card className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-(--dark-300)">Step 1</p>
-            <p className="mt-1 text-base font-medium text-(--dark-400)">Wallet</p>
+          <div className="flex items-center gap-3">
+            <StepBadge index={1} complete={isConnected} />
+            <p className="text-base font-medium text-(--dark-400)">Connect your wallet</p>
           </div>
           {isConnected && address !== undefined ? (
-            <div className="flex items-center gap-2 text-sm font-semibold text-(--dark-400)">
-              <HugeiconsIcon icon={Tick02Icon} size={18} strokeWidth={1.5} className="text-(--purple-500)" />
-              {address.slice(0, 6)}...{address.slice(-4)}
-              <span className="text-(--dark-300)">Connected</span>
+            <div className="pl-10 leading-tight sm:pl-0 sm:text-right">
+              <p className="text-sm font-semibold text-(--dark-400)">Connected</p>
+              <p className="font-mono text-xs text-(--dark-300)">{address.slice(0, 6)}...{address.slice(-4)}</p>
             </div>
           ) : (
             <Button
@@ -73,18 +72,16 @@ export default function Home() {
         </Card>
 
         <Card className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-(--dark-300)">Step 2</p>
-              <p className="mt-1 text-base font-medium text-(--dark-400)">Name this secret</p>
-            </div>
-            {secretState === 'created' && (
-              <HugeiconsIcon icon={Tick02Icon} size={18} strokeWidth={1.5} className="text-(--purple-500)" />
-            )}
+          <div className="flex items-center gap-3">
+            <StepBadge index={2} complete={secretState === 'created'} />
+            <label htmlFor="secret-name" className="text-base font-medium text-(--dark-400)">
+              Name this secret
+            </label>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex flex-col gap-3 pl-11 sm:flex-row sm:pl-11">
             <input
+              id="secret-name"
               type="text"
               value={secretName}
               onChange={(event) => {
@@ -110,14 +107,17 @@ export default function Home() {
           </div>
 
           {secretState === 'created' && (
-            <p className="text-sm text-(--dark-300)">
+            <p className="pl-11 text-sm text-(--dark-300)">
               Secret created. Your agent can now request access to it.
             </p>
+          )}
+          {!isConnected && (
+            <p className="pl-11 text-sm text-(--dark-100)">Connect your wallet first.</p>
           )}
         </Card>
       </div>
 
-      <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
+      <div className="mt-10 flex flex-col items-end gap-2">
         {canContinue ? (
           <Link
             href="/sandbox"
@@ -127,14 +127,30 @@ export default function Home() {
             <HugeiconsIcon icon={ArrowRight02Icon} size={18} strokeWidth={1.5} />
           </Link>
         ) : (
-          <Button variant="primary" icon={ArrowRight02Icon} iconPosition="trailing" disabled>
-            Continue
-          </Button>
+          <>
+            <Button variant="primary" icon={ArrowRight02Icon} iconPosition="trailing" disabled>
+              Continue
+            </Button>
+            <p className="text-xs text-(--dark-100)">Complete both steps to continue.</p>
+          </>
         )}
-        <Link href="/sandbox" className="text-xs text-(--dark-300) underline underline-offset-4 hover:text-(--dark-400)">
+        <Link href="/sandbox" className="mt-2 text-xs text-(--dark-300) underline underline-offset-4 hover:text-(--dark-400)">
           Open developer sandbox
         </Link>
       </div>
     </SplitScreenShell>
+  );
+}
+
+function StepBadge({ index, complete }: { index: number; complete: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition ${
+        complete ? 'bg-(--purple-500) text-white' : 'border border-(--dark-50) text-(--dark-300)'
+      }`}
+    >
+      {complete ? <HugeiconsIcon icon={Tick02Icon} size={14} strokeWidth={2} /> : index}
+    </span>
   );
 }
