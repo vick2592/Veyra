@@ -125,11 +125,11 @@ function getWorldIdSignal(
   agentAddress: `0x${string}`,
   secretId: `0x${string}`,
 ): string {
-  const digest = keccak256(encodePacked(
+  const rawPackedHex = encodePacked(
     ['address', 'address', 'bytes32'],
-    [userAddress, agentAddress, secretId],
-  ));
-  return (BigInt(digest) >> BigInt(8)).toString();
+    [userAddress, agentAddress, secretId]
+  );
+  return rawPackedHex;
 }
 
 function getSimulatorUrl(connectorURI: string): string {
