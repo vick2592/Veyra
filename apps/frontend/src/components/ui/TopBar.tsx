@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { HugeiconsIcon } from '@hugeicons/react';
 import {
   ArrowDown01Icon,
@@ -165,16 +164,8 @@ export function TopBar({
   pendingCount?: number;
 }) {
   return (
-    <header className="flex items-center justify-between">
-      <div className="flex items-center gap-4">
-        <Link
-          href="/"
-          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-(--dark-500)"
-        >
-          <img src="/veyra-mark.svg" alt="Veyra" className="h-6 w-6 object-contain" />
-        </Link>
-        <h1 className="text-2xl font-semibold text-(--dark-400)">{title}</h1>
-      </div>
+    <header className="flex items-center justify-between px-6 py-5 sm:px-10">
+      <h1 className="text-2xl font-semibold text-(--dark-400)">{title}</h1>
 
       <div className="flex items-center gap-3">
         <NotificationBell pendingCount={pendingCount} />

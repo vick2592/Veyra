@@ -11,10 +11,12 @@ type DashboardShellProps = {
 
 export function DashboardShell({ title, tier, pendingCount, children }: DashboardShellProps) {
   return (
-    <div className="min-h-screen bg-(--creame) px-6 py-6 sm:px-10">
-      <TopBar title={title} tier={tier} pendingCount={pendingCount} />
+    <div className="flex min-h-screen bg-(--creame)">
       <Sidebar />
-      <main className="mt-10 sm:pl-24">{children}</main>
+      <div className="flex flex-1 flex-col">
+        <TopBar title={title} tier={tier} pendingCount={pendingCount} />
+        <main className="flex-1 px-6 py-6 sm:px-10">{children}</main>
+      </div>
     </div>
   );
 }
