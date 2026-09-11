@@ -29,6 +29,9 @@ const agentAuthorizedEvent = {
   ],
 } as const;
 
+const BLOCK_RANGE_LIMIT = BigInt(9_000); // Base Sepolia's public RPC caps eth_getLogs at 10,000 blocks per call
+const MAX_LOOKBACK_BLOCKS = BigInt(100_000); // ~2.3 days at Base's ~2s block time — comfortably past this contract's real deploy age
+
 type ActivityEntry = {
   agentAddress: string;
   secretId: string;
@@ -36,6 +39,49 @@ type ActivityEntry = {
   requestId: string;
   authorizedAt: bigint;
 };
+
+/**
+ * Base Sepolia's public RPC rejects a single eth_getLogs call spanning more
+ * than 10,000 blocks, and "earliest" spans the chain's entire history — so
+ * this walks backward from the latest block in windows under that limit.
+ */
+async function fetchAgentAuthorizedLogs(
+  client: NonNullable<ReturnType<typeof usePublicClient>>,
+  userAddress: `0x${string}`,
+  contractAddress: `0x${string}`,
+): Promise<ActivityEntry[]> {
+  const latestBlock = await client.getBlockNumber();
+  const earliestBlock = latestBlock > MAX_LOOKBACK_BLOCKS ? latestBlock - MAX_LOOKBACK_BLOCKS : BigInt(0);
+
+  const entries: ActivityEntry[] = [];
+  let toBlock = latestBlock;
+  while (toBlock >= earliestBlock) {
+    const fromBlock = toBlock - BLOCK_RANGE_LIMIT + BigInt(1) > earliestBlock
+      ? toBlock - BLOCK_RANGE_LIMIT + BigInt(1)
+      : earliestBlock;
+    const chunk = await client.getLogs({
+      address: contractAddress,
+      event: agentAuthorizedEvent,
+      args: { user: userAddress },
+      fromBlock,
+      toBlock,
+    });
+    for (const log of chunk) {
+      entries.push({
+        agentAddress: log.args.agent as string,
+        secretId: log.args.secretId as string,
+        nullifierHash: log.args.nullifierHash as bigint,
+        requestId: log.args.requestId as string,
+        authorizedAt: log.args.authorizedAt as bigint,
+      });
+    }
+    if (fromBlock === earliestBlock) {
+      break;
+    }
+    toBlock = fromBlock - BigInt(1);
+  }
+  return entries;
+}
 
 const demoSecretId = getSecretId('openai-key');
 
@@ -72,25 +118,10 @@ export default function ActivityPage() {
     setEntries(null);
     setErrorMessage(null);
 
-    publicClient
-      .getLogs({
-        address: registryAddress,
-        event: agentAuthorizedEvent,
-        args: { user: address },
-        fromBlock: 'earliest',
-        toBlock: 'latest',
-      })
+    fetchAgentAuthorizedLogs(publicClient, address, registryAddress)
       .then((logs) => {
         if (!active) return;
-        const rows = logs
-          .map((log) => ({
-            agentAddress: log.args.agent as string,
-            secretId: log.args.secretId as string,
-            nullifierHash: log.args.nullifierHash as bigint,
-            requestId: log.args.requestId as string,
-            authorizedAt: log.args.authorizedAt as bigint,
-          }))
-          .sort((a, b) => Number(b.authorizedAt) - Number(a.authorizedAt));
+        const rows = [...logs].sort((a, b) => Number(b.authorizedAt) - Number(a.authorizedAt));
         setEntries(rows);
       })
       .catch((error: unknown) => {
@@ -106,7 +137,7 @@ export default function ActivityPage() {
 
   return (
     <DashboardShell title="Activity">
-      <h2 className="text-4xl font-bold text-(--blue-500) sm:text-5xl">Activity</h2>
+      <h2 className="text-4xl font-bold text-(--blue-500) sm:text-5xl">Your Agent Decisions</h2>
       <p className="mt-2 text-sm text-(--dark-300)">Every decision Veyra has made, on the record.</p>
 
       <div className="mt-8">
