@@ -1,16 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AccessRequestToast, type AccessRequest } from '@/components/request/AccessRequestToast';
 import { TierPolicyResult } from '@/components/request/TierPolicyResult';
+import { HumanConfirmation } from '@/components/request/HumanConfirmation';
 import { Card } from '@/components/ui/Card';
 
 type PendingRequest = AccessRequest & {
   status: 'pending_human_auth' | 'executing' | 'completed' | 'failed';
 };
 
-type FlowStage = 'toast' | 'evaluating' | 'policy_result' | 'confirmation_pending';
+type FlowStage = 'toast' | 'evaluating' | 'policy_result' | 'confirmation' | 'approved' | 'denied';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 
@@ -27,7 +28,12 @@ export default function RequestPage() {
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [stage, setStage] = useState<FlowStage>('toast');
+  const [activeRequest, setActiveRequest] = useState<AccessRequest | null>(null);
+  const [approvedTxHash, setApprovedTxHash] = useState<`0x${string}` | null>(null);
+  const [deniedReason, setDeniedReason] = useState<'user_denied' | 'expired' | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const stageRef = useRef<FlowStage>('toast');
+  stageRef.current = stage;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -37,12 +43,14 @@ export default function RequestPage() {
         const requests = await fetchPendingRequests(controller.signal);
         setPendingRequests(requests);
         setLoadError(null);
-        setSelectedRequestId((current) => {
-          if (current !== null && requests.some((request) => request.requestId === current)) {
-            return current;
-          }
-          return requests[0]?.requestId ?? null;
-        });
+        if (stageRef.current === 'toast') {
+          setSelectedRequestId((current) => {
+            if (current !== null && requests.some((request) => request.requestId === current)) {
+              return current;
+            }
+            return requests[0]?.requestId ?? null;
+          });
+        }
       } catch (error) {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
           setLoadError(error instanceof Error ? error.message : 'Pending requests could not be loaded.');
@@ -59,19 +67,43 @@ export default function RequestPage() {
   }, []);
 
   const selectedRequest = pendingRequests.find((request) => request.requestId === selectedRequestId);
+  const displayRequest = stage === 'toast' || stage === 'evaluating' ? selectedRequest : activeRequest;
 
   function handleEvaluate() {
+    if (selectedRequest === undefined) {
+      return;
+    }
+    setActiveRequest(selectedRequest);
     setStage('evaluating');
     window.setTimeout(() => setStage('policy_result'), 500);
   }
 
   function handleCancel() {
     setSelectedRequestId(null);
+    setActiveRequest(null);
     setStage('toast');
   }
 
   function handleContinueToConfirmation() {
-    setStage('confirmation_pending');
+    setStage('confirmation');
+  }
+
+  function handleApproved(txHash: `0x${string}`) {
+    setApprovedTxHash(txHash);
+    setStage('approved');
+  }
+
+  function handleDenied(reason: 'user_denied' | 'expired') {
+    setDeniedReason(reason);
+    setStage('denied');
+  }
+
+  function handleReset() {
+    setSelectedRequestId(null);
+    setActiveRequest(null);
+    setApprovedTxHash(null);
+    setDeniedReason(null);
+    setStage('toast');
   }
 
   return (
@@ -84,7 +116,7 @@ export default function RequestPage() {
       </header>
 
       <div className="mx-auto mt-16 max-w-xl">
-        {selectedRequest === undefined ? (
+        {displayRequest === undefined || displayRequest === null ? (
           <Card>
             <p className="text-sm leading-6 text-(--dark-300)">
               {loadError ?? 'No pending requests. Waiting for an agent to submit one.'}
@@ -92,18 +124,36 @@ export default function RequestPage() {
           </Card>
         ) : stage === 'toast' || stage === 'evaluating' ? (
           <AccessRequestToast
-            request={selectedRequest}
+            request={displayRequest}
             isEvaluating={stage === 'evaluating'}
             onEvaluate={handleEvaluate}
             onCancel={handleCancel}
           />
         ) : stage === 'policy_result' ? (
-          <TierPolicyResult request={selectedRequest} onContinue={handleContinueToConfirmation} />
+          <TierPolicyResult request={displayRequest} onContinue={handleContinueToConfirmation} />
+        ) : stage === 'confirmation' ? (
+          <HumanConfirmation request={displayRequest} onApproved={handleApproved} onDenied={handleDenied} />
+        ) : stage === 'approved' ? (
+          <Card>
+            <p className="text-sm leading-6 text-(--dark-300)">
+              Approved. Transaction: <span className="font-mono text-xs">{approvedTxHash}</span>
+              <br />
+              The Granted: High Risk screen for this request is next.
+            </p>
+            <button type="button" onClick={handleReset} className="mt-4 text-xs font-semibold text-(--purple-500)">
+              Back to requests
+            </button>
+          </Card>
         ) : (
           <Card>
             <p className="text-sm leading-6 text-(--dark-300)">
-              The Human Confirmation screen for this request is next.
+              {deniedReason === 'expired' ? 'Confirmation expired.' : 'Request denied.'}
+              <br />
+              The Denied / Expired screen for this request is next.
             </p>
+            <button type="button" onClick={handleReset} className="mt-4 text-xs font-semibold text-(--purple-500)">
+              Back to requests
+            </button>
           </Card>
         )}
 
