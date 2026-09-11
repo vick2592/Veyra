@@ -9,6 +9,7 @@ import { IdVerifiedIcon, LockKeyIcon, Tick02Icon } from '@hugeicons/core-free-ic
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { getActionNarrative, getAgentLabel } from '@/lib/demoNarrative';
+import { sendApprovalNotification } from '@/lib/notifications';
 import {
   getOnChainProof,
   getSecretId,
@@ -51,6 +52,17 @@ export function HumanConfirmation({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const hasSettled = useRef(false);
   const proofRef = useRef<ReturnType<typeof getOnChainProof> | null>(null);
+
+  // Real desktop notification (Settings' toggle), matching Page 07's own
+  // trigger point — fires once, when a confirmation actually opens.
+  useEffect(() => {
+    const detail = narrative.detail.length > 0 ? ` ${narrative.detail}` : '';
+    sendApprovalNotification(
+      'Veyra: approval needed',
+      `${agentLabel} wants ${narrative.headline}${detail}. Expires in ${CONFIRMATION_WINDOW_SECONDS}s.`,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { address } = useAccount();
   const { writeContractAsync } = useWriteContract();
