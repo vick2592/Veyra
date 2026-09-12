@@ -12,8 +12,8 @@ type TeamMember = {
 
 const team: TeamMember[] = [
   { name: 'Viktor Khachatryan', role: 'World ID · Ledger · Bazantic', photo: '/team-victor.png', github: 'vick2592' },
-  { name: 'Comfort Khonje', role: 'Frontend · Design · Demo', photo: '/team-comfort.jpeg', github: 'ComfortKhonje' },
-  { name: 'Sivaji Alla', role: 'Backend · Contracts', photo: '/team-sivaji.jpg', github: 'sivajialla' },
+  { name: 'Comfort Khonje', role: 'UI/UX Design · Frontend · Marketing', photo: '/team-comfort.jpeg', github: 'ComfortKhonje' },
+  { name: 'Sivaji Alla', role: 'Backend · Contracts · Base', photo: '/team-sivaji.jpg', github: 'sivajialla' },
 ];
 
 export function TeamSection() {
