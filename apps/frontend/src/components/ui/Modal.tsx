@@ -43,14 +43,14 @@ export function Modal({ open, onClose, children, size = 'md' }: ModalProps) {
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(4,8,19,0.55)] p-5"
+      className="animate-veyra-fade-in fixed inset-0 z-50 flex items-center justify-center bg-[rgba(4,8,19,0.55)] p-5"
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onClose?.();
         }
       }}
     >
-      <div className={`w-full ${sizeClasses[size]} rounded-[32px] bg-(--creame) p-10 shadow-[0_24px_80px_rgba(4,8,19,0.28)]`}>
+      <div className={`animate-veyra-pop-in w-full ${sizeClasses[size]} rounded-[32px] bg-(--creame) p-10 shadow-[0_24px_80px_rgba(4,8,19,0.28)]`}>
         {children}
       </div>
     </div>

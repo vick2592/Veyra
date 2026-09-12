@@ -37,14 +37,14 @@ export function Drawer({ open, onClose, children }: DrawerProps) {
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex justify-end bg-[rgba(4,8,19,0.55)]"
+      className="animate-veyra-fade-in fixed inset-0 z-50 flex justify-end bg-[rgba(4,8,19,0.55)]"
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
         }
       }}
     >
-      <div className="h-full w-full max-w-md overflow-y-auto bg-(--creame) p-8 shadow-[0_24px_80px_rgba(4,8,19,0.28)]">
+      <div className="animate-veyra-slide-in-right h-full w-full max-w-md overflow-y-auto bg-(--creame) p-8 shadow-[0_24px_80px_rgba(4,8,19,0.28)]">
         {children}
       </div>
     </div>

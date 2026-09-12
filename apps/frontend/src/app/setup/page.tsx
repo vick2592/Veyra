@@ -142,8 +142,8 @@ function StepBadge({ index, complete }: { index: number; complete: boolean }) {
   return (
     <span
       aria-hidden="true"
-      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition ${
-        complete ? 'bg-(--purple-500) text-white' : 'border border-(--dark-50) text-(--dark-300)'
+      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors duration-300 ${
+        complete ? 'animate-veyra-pop-in bg-(--purple-500) text-white' : 'border border-(--dark-50) text-(--dark-300)'
       }`}
     >
       {complete ? <HugeiconsIcon icon={Tick02Icon} size={14} strokeWidth={2} /> : index}

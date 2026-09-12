@@ -248,8 +248,6 @@ export function HumanConfirmation({
   }
 
   const canDeny = stage === 'awaiting_world_id' || stage === 'preparing_world_id' || stage === 'awaiting_wallet_signature';
-  const minutes = Math.floor(secondsLeft / 60);
-  const seconds = String(secondsLeft % 60).padStart(2, '0');
 
   return (
     <Card className="flex flex-col gap-6">
@@ -258,9 +256,7 @@ export function HumanConfirmation({
           <p className="text-lg font-semibold text-(--dark-400)">Confirm this action</p>
           <p className="mt-1 text-xs text-(--dark-300)">{agentLabel} · {request.secretIdentifier}</p>
         </div>
-        <span className="rounded-full border border-(--dark-50) px-3 py-1 text-sm font-semibold text-(--dark-400)">
-          {minutes}:{seconds}
-        </span>
+        <CountdownRing secondsLeft={secondsLeft} totalSeconds={CONFIRMATION_WINDOW_SECONDS} />
       </div>
 
       <div>
@@ -364,11 +360,48 @@ export function HumanConfirmation({
   );
 }
 
+/**
+ * Real urgency cue, not decoration — the original spec called for "a ring
+ * or bar, not a bare number" here and it never got built until now. Purple,
+ * not red: the locked palette has no 5th/error color, so urgency reads
+ * through motion and depletion, not a color change.
+ */
+function CountdownRing({ secondsLeft, totalSeconds }: { secondsLeft: number; totalSeconds: number }) {
+  const radius = 18;
+  const circumference = 2 * Math.PI * radius;
+  const progress = Math.max(secondsLeft, 0) / totalSeconds;
+  const offset = circumference * (1 - progress);
+  const minutes = Math.floor(secondsLeft / 60);
+  const seconds = String(secondsLeft % 60).padStart(2, '0');
+
+  return (
+    <div className="relative flex h-11 w-11 items-center justify-center">
+      <svg viewBox="0 0 40 40" className="h-11 w-11 -rotate-90">
+        <circle cx="20" cy="20" r={radius} fill="none" strokeWidth="3" className="stroke-(--dark-50)" />
+        <circle
+          cx="20"
+          cy="20"
+          r={radius}
+          fill="none"
+          strokeWidth="3"
+          strokeLinecap="round"
+          className="stroke-(--purple-500) transition-[stroke-dashoffset] duration-1000 ease-linear"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+        />
+      </svg>
+      <span className="absolute text-[11px] font-semibold text-(--dark-400)">
+        {minutes}:{seconds}
+      </span>
+    </div>
+  );
+}
+
 function StepMarker({ number, complete }: { number: number; complete: boolean }) {
   return (
     <span
-      className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-        complete ? 'bg-(--purple-500) text-white' : 'border border-(--dark-50) text-(--dark-300)'
+      className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors duration-300 ${
+        complete ? 'animate-veyra-pop-in bg-(--purple-500) text-white' : 'border border-(--dark-50) text-(--dark-300)'
       }`}
     >
       {complete ? <HugeiconsIcon icon={Tick02Icon} size={12} strokeWidth={2} /> : number}
