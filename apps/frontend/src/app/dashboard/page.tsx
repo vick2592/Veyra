@@ -6,6 +6,7 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { FingerPrintCheckIcon, Wallet01Icon } from '@hugeicons/core-free-icons';
 import { DashboardShell } from '@/components/ui/DashboardShell';
 import { Card } from '@/components/ui/Card';
+import { PendingRequestBanner } from '@/components/dashboard/PendingRequestBanner';
 import { SecretProvisioningCard } from '@/components/dashboard/SecretProvisioningCard';
 import { AgentExecutionCard } from '@/components/dashboard/AgentExecutionCard';
 import { TrustChainVisualizer } from '@/components/dashboard/TrustChainVisualizer';
@@ -53,6 +54,10 @@ export default function DashboardPage() {
     <DashboardShell title="Dashboard">
       <h2 className="text-4xl font-bold text-(--blue-500) sm:text-5xl">Your Veyra overview</h2>
       <p className="mt-2 text-sm text-(--dark-300)">Identity, secrets, and agents — all in one place.</p>
+
+      <div className="mt-6">
+        <PendingRequestBanner />
+      </div>
 
       {address !== undefined && (
         <div className="mt-8">
