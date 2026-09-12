@@ -6,6 +6,7 @@ import { createKeyring } from './keyring.js';
 import { createPendingRequestStore } from './queue/store.js';
 import type { PendingRequestStore } from './queue/store.js';
 import { createBazanticRouter } from './routes/bazantic.js';
+import { createEncryptSecretHandler } from './secrets.js';
 import { createBazanticAdapter } from './services/bazantic.js';
 import { createWorldIdSignHandler, createWorldIdVerifier, getWorldIdConfig } from './world-id.js';
 
@@ -90,6 +91,11 @@ export function createApp(config: AppConfig, dependencies: AppDependencies = {})
       agentApiUrl: config.agentApiUrl,
     }));
   }
+
+  app.post(
+    '/api/secrets/encrypt',
+    createEncryptSecretHandler(config.walletPass === undefined ? {} : { walletPass: config.walletPass }),
+  );
 
   app.get('/health', (_request, response) => {
     response.json({
