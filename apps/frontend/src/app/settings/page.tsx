@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 import { HugeiconsIcon } from '@hugeicons/react';
 import type { IconSvgElement } from '@hugeicons/react';
-import { FaceIdIcon, Key01Icon, Notification03Icon } from '@hugeicons/core-free-icons';
+import { ArrowRight02Icon, BlueprintIcon, FaceIdIcon, Key01Icon, Notification03Icon } from '@hugeicons/core-free-icons';
 import { DashboardShell } from '@/components/ui/DashboardShell';
 import { Card } from '@/components/ui/Card';
 import {
@@ -122,6 +123,19 @@ export default function SettingsPage() {
                 }`}
               />
             </button>
+          </div>
+        </SettingsRow>
+
+        <SettingsRow icon={BlueprintIcon} title="Architecture overview">
+          <div className="flex items-center gap-3">
+            <p className="max-w-xs text-sm text-(--dark-300)">How Veyra keeps this secure — World ID, Ledger Key Ring, Bazantic, on-chain audit.</p>
+            <Link
+              href="/architecture"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-(--purple-500) px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#6b4fe6]"
+            >
+              View
+              <HugeiconsIcon icon={ArrowRight02Icon} size={14} strokeWidth={1.5} />
+            </Link>
           </div>
         </SettingsRow>
       </div>

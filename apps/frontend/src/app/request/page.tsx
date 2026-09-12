@@ -79,8 +79,8 @@ function RequestFlow() {
     setStage('denied');
   }
 
-  function handleContinueToArchitecture() {
-    router.push('/architecture');
+  function handleContinueToDashboard() {
+    router.push('/dashboard');
   }
 
   function handleLeaveWhileExecuting() {
@@ -104,11 +104,11 @@ function RequestFlow() {
         <GrantedHighRisk
           request={request}
           txHash={approvedTxHash}
-          onContinue={handleContinueToArchitecture}
+          onContinue={handleContinueToDashboard}
           onLeave={handleLeaveWhileExecuting}
         />
       ) : stage === 'denied' && deniedReason !== null ? (
-        <DeniedExpired request={request} reason={deniedReason} onContinue={handleContinueToArchitecture} />
+        <DeniedExpired request={request} reason={deniedReason} onContinue={handleContinueToDashboard} />
       ) : null}
 
       <Link

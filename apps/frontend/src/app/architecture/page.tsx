@@ -72,10 +72,10 @@ export default function ArchitecturePage() {
 
         <div className="mt-10 flex justify-center">
           <Link
-            href="/agents"
+            href="/settings"
             className="inline-flex min-w-56 items-center justify-center rounded-full bg-(--purple-500) px-6 py-4 text-sm font-semibold text-white transition hover:bg-[#6b4fe6]"
           >
-            Back to agents
+            Back to settings
           </Link>
         </div>
       </div>
