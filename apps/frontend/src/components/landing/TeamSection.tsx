@@ -11,9 +11,9 @@ type TeamMember = {
 };
 
 const team: TeamMember[] = [
-  { name: 'Comfort', role: 'Frontend · Design · Demo', photo: '/team-comfort.jpeg' },
-  { name: 'Viktor', role: 'World ID · Ledger · Graph', photo: '/team-victor.png', github: 'vick2592' },
-  { name: 'Sivaji', role: 'Backend · Contracts', photo: '/team-sivaji.jpg' },
+  { name: 'Viktor Khachatryan', role: 'World ID · Ledger · Graph', photo: '/team-victor.png', github: 'vick2592' },
+  { name: 'Comfort Khonje', role: 'Frontend · Design · Demo', photo: '/team-comfort.jpeg' },
+  { name: 'Sivaji Alla', role: 'Backend · Contracts', photo: '/team-sivaji.jpg' },
 ];
 
 export function TeamSection() {
@@ -40,7 +40,9 @@ export function TeamSection() {
                 aria-hidden="true"
                 className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/0 to-transparent"
               />
-              <p className="absolute bottom-4 left-5 text-lg font-semibold text-white">{member.name}</p>
+              <p className="absolute inset-x-5 bottom-4 text-base font-semibold uppercase tracking-wide text-white">
+                {member.name}
+              </p>
             </div>
             <div className="flex items-center justify-between gap-3 p-5">
               <p className="text-sm text-(--dark-300)">{member.role}</p>
