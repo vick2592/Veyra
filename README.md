@@ -8,6 +8,18 @@ Veyra is a capability broker that lets an AI agent request sensitive work withou
 
 The application is fully scaffolded, built, and deployed to **Base Sepolia**. The repository contains an independently installable Next.js frontend and Express backend, plus a separate Web3 workspace containing the decentralized registry and blockchain tooling.
 
+**Phase 1 — Multi-User Dashboard & Per-User Hardware Decryption: complete.** Any connected wallet can register, encrypt-and-store a secret under its own hardware-derived key slot, and trigger the same World ID authorization pipeline from `/dashboard`. The chain listener decrypts the specific per-user secret an authorization is for, rather than a single shared operator key. Next up: Bazantic x402 bounty integration (not started).
+
+## Architecture: Universal Hardware Custodian
+
+Veyra never lets an AI agent, or the broker itself, hold a raw API key. Three independent layers compose into one authorization chain, and each is designed so that compromising one alone isn't enough:
+
+1. **On-chain storage (`VeyraRegistry.storeSecret`)** — `blockchain/packages/contracts/src/VeyraRegistry.sol` holds every secret as ciphertext in `mapping(address => mapping(bytes32 => Secret)) _secrets`. Storage is keyed per user, so a `secretId` only has to be unique within one person's own labels (`secretId = keccak256(label)`) — the contract itself never sees, and cannot decrypt, a plaintext secret. `storeSecret` bumps a version and timestamp on every write; `revokeSecret` only flips an `active` flag, since nothing written to a public chain can actually be erased.
+2. **World ID ZK proof verification** — before any stored secret can be used, a human proves liveness through World ID Face Auth (staging environment, `execute-agent` action). The proof is verified on-chain against the World ID Router inside `authorizeAgent`, which binds the specific user, agent, and secret into the signed action and emits `AgentAuthorized`. This is the only step that involves a person; the rest of the pipeline is machine-to-machine.
+3. **Ledger Key Ring hardware custody** — the backend acts as a Universal Hardware Custodian via `@ledgerhq/wallet-cli`. Each user's secrets are encrypted and decrypted under a hardware-scoped key named `veyra-user-<leafIndex>`, where `leafIndex = keccak256(userAddress) % 2^31`. `wallet-cli ring encrypt`/`ring decrypt` take an opaque `--key <name>`, not a BIP-32 derivation path — the leaf index is a deterministic, collision-resistant naming scheme for that scoped key, not on-device child-key derivation. A software HKDF + AES-256-GCM fallback (`VEYRA_DEMO_MODE=true` or `NODE_ENV=development`) exists so the full flow runs without a physical Ledger attached; the derivation and key-selection logic are otherwise identical either way.
+
+The result: the contract can't decrypt anything, the broker can't act without a fresh human liveness proof, and no single secret's ciphertext is usable without the specific hardware-derived key it was encrypted under.
+
 ## Architecture
 
 ```text
