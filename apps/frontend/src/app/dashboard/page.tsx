@@ -8,6 +8,7 @@ import { DashboardShell } from '@/components/ui/DashboardShell';
 import { Card } from '@/components/ui/Card';
 import { HubStats } from '@/components/dashboard/HubStats';
 import { PendingRequestBanner } from '@/components/dashboard/PendingRequestBanner';
+import { RecentActivityPreview } from '@/components/dashboard/RecentActivityPreview';
 import { SecretProvisioningCard } from '@/components/dashboard/SecretProvisioningCard';
 import { AgentExecutionCard } from '@/components/dashboard/AgentExecutionCard';
 import { TrustChainVisualizer } from '@/components/dashboard/TrustChainVisualizer';
@@ -68,6 +69,10 @@ export default function DashboardPage() {
 
       <div className="mt-6">
         <HubStats />
+      </div>
+
+      <div className="mt-6">
+        <RecentActivityPreview />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
