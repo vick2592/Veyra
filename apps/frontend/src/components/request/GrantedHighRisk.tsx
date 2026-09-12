@@ -74,7 +74,7 @@ export function GrantedHighRisk({
   }, [request.requestId]);
 
   return (
-    <div className="flex flex-col items-center text-center">
+    <div className="animate-veyra-fade-in flex flex-col items-center text-center">
       <h1 className="text-[40px] font-semibold leading-[1.05] tracking-[-0.02em] text-(--blue-500) sm:text-[52px]">
         {execution === 'executing' ? 'Executing on-chain...' : execution === 'completed' ? 'Action approved' : 'Approved, but execution failed'}
       </h1>

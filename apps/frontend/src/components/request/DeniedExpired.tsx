@@ -29,7 +29,7 @@ export function DeniedExpired({
   const copy = reasonCopy[reason];
 
   return (
-    <div className="flex flex-col items-center text-center">
+    <div className="animate-veyra-fade-in flex flex-col items-center text-center">
       <h1 className="text-[40px] font-semibold leading-[1.05] tracking-[-0.02em] text-(--blue-500) sm:text-[52px]">
         {copy.heading}
       </h1>

@@ -250,7 +250,7 @@ export function HumanConfirmation({
   const canDeny = stage === 'awaiting_world_id' || stage === 'preparing_world_id' || stage === 'awaiting_wallet_signature';
 
   return (
-    <Card className="flex flex-col gap-6">
+    <Card className="animate-veyra-fade-in flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-lg font-semibold text-(--dark-400)">Confirm this action</p>
@@ -319,8 +319,13 @@ export function HumanConfirmation({
       </div>
 
       {rpContext !== null && (isIdKitOpen || connectorURI !== null) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(4,8,19,0.5)] p-5" role="dialog" aria-modal="true" aria-label="World ID verification">
-          <div className="w-full max-w-md rounded-3xl border border-(--dark-50) bg-white p-6 text-sm shadow-[0_24px_80px_rgba(4,8,19,0.28)]">
+        <div
+          className="animate-veyra-fade-in fixed inset-0 z-50 flex items-center justify-center bg-[rgba(4,8,19,0.5)] p-5"
+          role="dialog"
+          aria-modal="true"
+          aria-label="World ID verification"
+        >
+          <div className="animate-veyra-pop-in w-full max-w-md rounded-3xl border border-(--dark-50) bg-white p-6 text-sm shadow-[0_24px_80px_rgba(4,8,19,0.28)]">
             <div className="flex min-h-60 items-center justify-center rounded-xl bg-(--creame) p-3">
               {qrDataUrl === null ? (
                 <p className="text-center text-xs text-(--dark-300)">Preparing QR code...</p>

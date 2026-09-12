@@ -17,7 +17,7 @@ export function TierPolicyResult({ request }: { request: AccessRequest }) {
   const agentLabel = getAgentLabel(request.agentAddress);
 
   return (
-    <Card className="flex flex-col gap-6">
+    <Card className="animate-veyra-fade-in flex flex-col gap-6">
       <div>
         <p className="text-lg font-semibold text-(--dark-400)">Request evaluated</p>
         <p className="mt-2 text-sm leading-6 text-(--dark-300)">

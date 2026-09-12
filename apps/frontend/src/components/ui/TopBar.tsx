@@ -146,7 +146,7 @@ function WalletChip({ tier }: { tier?: Tier }) {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-14 z-50 w-80 rounded-2xl border border-(--dark-50) bg-white p-4 text-sm text-(--dark-400) shadow-[0_16px_48px_rgba(4,8,19,0.16)]">
+        <div className="animate-veyra-pop-in absolute right-0 top-14 z-50 w-80 rounded-2xl border border-(--dark-50) bg-white p-4 text-sm text-(--dark-400) shadow-[0_16px_48px_rgba(4,8,19,0.16)]">
           <p className="break-all text-xs text-(--dark-300)">{address}</p>
           <button
             type="button"
