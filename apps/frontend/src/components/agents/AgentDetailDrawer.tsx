@@ -8,8 +8,13 @@ import { useAccount, usePublicClient } from 'wagmi';
 import { Drawer } from '@/components/ui/Drawer';
 import { StatusPill, type AgentStatus } from './StatusPill';
 import { getActionNarrative } from '@/lib/demoNarrative';
+import { formatErrorMessage } from '@/lib/formatError';
+import { fetchSecretsOf, type SecretSummary } from '@/lib/secrets';
 import { registryAddress } from '@/lib/worldIdAuthorization';
 import { fetchAgentAuthorizedLogs, formatRelativeTime, resolveSecretLabel, type ActivityEntry } from '@/lib/activityLog';
+import type { PendingRequest } from '@/components/request/AccessRequestModal';
+
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 
 export type DrawerAgent = {
   address: string;
@@ -22,14 +27,23 @@ export function AgentDetailDrawer({
   open,
   agent,
   onClose,
+  disableSimulate,
+  onSimulated,
 }: {
   open: boolean;
   agent: DrawerAgent | null;
   onClose: () => void;
+  /** True when some other pending request is already open elsewhere on the page. */
+  disableSimulate: boolean;
+  onSimulated: (request: PendingRequest) => void;
 }) {
   const { address, isConnected } = useAccount();
   const publicClient = usePublicClient();
   const [recent, setRecent] = useState<ActivityEntry[] | null>(null);
+  const [secrets, setSecrets] = useState<SecretSummary[] | null>(null);
+  const [selectedSecretLabel, setSelectedSecretLabel] = useState('');
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simulateError, setSimulateError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open || agent === null || !isConnected || address === undefined || publicClient === undefined || registryAddress === undefined) {
@@ -52,9 +66,78 @@ export function AgentDetailDrawer({
     };
   }, [open, agent, address, isConnected, publicClient]);
 
+  // The secret picker for "Simulate a request" — this wallet's own secrets,
+  // not a hardcoded identifier, so any secret you've created can be requested.
+  useEffect(() => {
+    if (!open || !isConnected || address === undefined || publicClient === undefined || registryAddress === undefined) {
+      setSecrets(null);
+      return;
+    }
+    let active = true;
+    fetchSecretsOf(publicClient, address, registryAddress)
+      .then((rows) => active && setSecrets(rows))
+      .catch(() => active && setSecrets([]));
+    return () => {
+      active = false;
+    };
+  }, [open, address, isConnected, publicClient]);
+
+  useEffect(() => {
+    if (secrets === null) {
+      return;
+    }
+    const activeSecrets = secrets.filter((secret) => secret.active);
+    setSelectedSecretLabel((current) =>
+      activeSecrets.some((secret) => secret.label === current) ? current : activeSecrets[0]?.label ?? '',
+    );
+  }, [secrets]);
+
+  useEffect(() => {
+    setSimulateError(null);
+  }, [agent?.address]);
+
+  async function handleSimulate() {
+    if (agent === null || selectedSecretLabel.length === 0) {
+      return;
+    }
+    setIsSimulating(true);
+    setSimulateError(null);
+    try {
+      const idempotencyKey = `agents-${crypto.randomUUID()}`;
+      const paymentReference = `agents-payment-${Date.now()}`;
+      const response = await fetch(`${backendUrl}/api/bazantic/requests`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'Payment-Signature': paymentReference,
+          'X-PAYMENT': paymentReference,
+          'x-payment-reference': paymentReference,
+        },
+        body: JSON.stringify({
+          secretIdentifier: selectedSecretLabel,
+          agentAddress: agent.address,
+          idempotencyKey,
+        }),
+      });
+      const body = (await response.json().catch(() => null)) as (PendingRequest & { error?: string }) | null;
+      if (!response.ok) {
+        throw new Error(body?.error ?? `Request failed with HTTP ${response.status}.`);
+      }
+      if (body !== null) {
+        onSimulated(body);
+      }
+    } catch (error) {
+      setSimulateError(formatErrorMessage(error, 'The request could not be sent.'));
+    } finally {
+      setIsSimulating(false);
+    }
+  }
+
   if (agent === null) {
     return null;
   }
+
+  const activeSecrets = secrets?.filter((secret) => secret.active) ?? [];
 
   return (
     <Drawer open={open} onClose={onClose}>
@@ -84,6 +167,46 @@ export function AgentDetailDrawer({
       </div>
 
       <p className="mt-4 text-sm leading-6 text-(--dark-300)">{agent.description}</p>
+
+      <div className="mt-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-(--dark-300)">Simulate a request</p>
+        {secrets === null ? (
+          <p className="mt-3 text-sm text-(--dark-300)">Loading your secrets...</p>
+        ) : activeSecrets.length === 0 ? (
+          <p className="mt-3 text-sm text-(--dark-300)">
+            No active secrets yet.{' '}
+            <Link href="/secrets" className="font-semibold text-(--purple-500)">
+              Add one
+            </Link>{' '}
+            to simulate {agent.label} requesting it.
+          </p>
+        ) : (
+          <div className="mt-3 flex flex-col gap-3">
+            <select
+              value={selectedSecretLabel}
+              onChange={(event) => setSelectedSecretLabel(event.target.value)}
+              disabled={isSimulating}
+              className="w-full rounded-full border border-(--dark-50) bg-white px-5 py-3 text-sm text-(--dark-400) focus:border-(--purple-500) focus:outline-none disabled:bg-(--dark-50)/30"
+            >
+              {activeSecrets.map((secret) => (
+                <option key={secret.secretId} value={secret.label}>
+                  {secret.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => void handleSimulate()}
+              disabled={isSimulating || disableSimulate}
+              title={disableSimulate ? 'Resolve the open request first' : undefined}
+              className="inline-flex items-center justify-center rounded-full border border-(--purple-500) px-6 py-3 text-sm font-semibold text-(--purple-500) transition hover:bg-(--purple-500)/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isSimulating ? 'Sending request...' : `Simulate ${agent.label} requesting this`}
+            </button>
+            {simulateError !== null && <p className="text-sm text-(--dark-400)">{simulateError}</p>}
+          </div>
+        )}
+      </div>
 
       <div className="mt-8">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-(--dark-300)">Recent activity</p>

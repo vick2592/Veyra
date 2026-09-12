@@ -7,19 +7,14 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { Robot01Icon } from '@hugeicons/core-free-icons';
 import { DashboardShell } from '@/components/ui/DashboardShell';
 import { Card } from '@/components/ui/Card';
-import { AccessRequestModal, type AccessRequest } from '@/components/request/AccessRequestModal';
+import { AccessRequestModal, type PendingRequest } from '@/components/request/AccessRequestModal';
 import { AgentDetailDrawer } from '@/components/agents/AgentDetailDrawer';
 import { RegisterAgentModal } from '@/components/agents/RegisterAgentModal';
 import { StatusPill, type AgentStatus } from '@/components/agents/StatusPill';
-import { DEMO_AGENT_ADDRESS, DEMO_SECRET_IDENTIFIER, getAgentLabel } from '@/lib/demoNarrative';
+import { DEMO_AGENT_ADDRESS, getAgentLabel } from '@/lib/demoNarrative';
 import { addRegisteredAgent, getRegisteredAgents } from '@/lib/agentDirectory';
-import { formatErrorMessage } from '@/lib/formatError';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
-
-type PendingRequest = AccessRequest & {
-  status: 'pending_human_auth' | 'executing' | 'completed' | 'failed';
-};
 
 type DemoAgent = {
   address: string;
@@ -41,7 +36,7 @@ const demoAgent: DemoAgent = {
   address: DEMO_AGENT_ADDRESS,
   label: getAgentLabel(DEMO_AGENT_ADDRESS),
   status: 'active',
-  description: `Requests access to ${DEMO_SECRET_IDENTIFIER}`,
+  description: 'Built-in demo agent — open it to simulate a request against any of your secrets.',
 };
 
 const filters: { key: 'all' | AgentStatus; label: string }[] = [
@@ -54,8 +49,6 @@ export default function AgentsPage() {
   const router = useRouter();
   const { address: ownerAddress } = useAccount();
   const [activeFilter, setActiveFilter] = useState<'all' | AgentStatus>('all');
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [modalRequest, setModalRequest] = useState<PendingRequest | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
@@ -130,40 +123,6 @@ export default function AgentsPage() {
       window.clearInterval(interval);
     };
   }, [dismissedIds]);
-
-  async function handleSimulate() {
-    setIsSimulating(true);
-    setErrorMessage(null);
-    try {
-      const idempotencyKey = `agents-${crypto.randomUUID()}`;
-      const paymentReference = `agents-payment-${Date.now()}`;
-      const response = await fetch(`${backendUrl}/api/bazantic/requests`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'Payment-Signature': paymentReference,
-          'X-PAYMENT': paymentReference,
-          'x-payment-reference': paymentReference,
-        },
-        body: JSON.stringify({
-          secretIdentifier: DEMO_SECRET_IDENTIFIER,
-          agentAddress: DEMO_AGENT_ADDRESS,
-          idempotencyKey,
-        }),
-      });
-      const body = (await response.json().catch(() => null)) as (PendingRequest & { error?: string }) | null;
-      if (!response.ok) {
-        throw new Error(body?.error ?? `Request failed with HTTP ${response.status}.`);
-      }
-      if (body !== null) {
-        setModalRequest(body);
-      }
-    } catch (error) {
-      setErrorMessage(formatErrorMessage(error, 'The request could not be sent.'));
-    } finally {
-      setIsSimulating(false);
-    }
-  }
 
   function handleCancelRequest() {
     if (modalRequest !== null) {
@@ -269,19 +228,6 @@ export default function AgentsPage() {
         ))}
       </div>
 
-      <div className="mt-8 flex items-center gap-4">
-        <button
-          type="button"
-          onClick={() => void handleSimulate()}
-          disabled={isSimulating || modalRequest !== null}
-          title={modalRequest !== null ? 'Resolve the open request first' : undefined}
-          className="inline-flex items-center justify-center rounded-full border border-(--purple-500) px-6 py-3 text-sm font-semibold text-(--purple-500) transition hover:bg-(--purple-500)/10 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isSimulating ? 'Sending request...' : 'Simulate agent request'}
-        </button>
-        {errorMessage !== null && <p className="text-sm text-(--dark-400)">{errorMessage}</p>}
-      </div>
-
       <AccessRequestModal
         open={modalRequest !== null}
         request={modalRequest}
@@ -290,7 +236,16 @@ export default function AgentsPage() {
         onCancel={handleCancelRequest}
       />
 
-      <AgentDetailDrawer open={detailAgent !== null} agent={detailAgent} onClose={() => setDetailAgent(null)} />
+      <AgentDetailDrawer
+        open={detailAgent !== null}
+        agent={detailAgent}
+        onClose={() => setDetailAgent(null)}
+        disableSimulate={modalRequest !== null}
+        onSimulated={(request) => {
+          setModalRequest(request);
+          setDetailAgent(null);
+        }}
+      />
 
       <RegisterAgentModal
         open={isRegisterOpen}

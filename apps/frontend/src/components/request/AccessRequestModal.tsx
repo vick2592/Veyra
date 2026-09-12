@@ -12,6 +12,12 @@ export type AccessRequest = {
   expiresAt: string;
 };
 
+/** An AccessRequest plus its Bazantic queue state — shared by /agents and the
+ * Agent Detail drawer's "Simulate request" picker, both of which create one. */
+export type PendingRequest = AccessRequest & {
+  status: 'pending_human_auth' | 'executing' | 'completed' | 'failed';
+};
+
 /**
  * Figma (node 66:7245) draws this frame with the Agent/Action/Resource/
  * Parameters block as bare labels, no values — a skeleton, not a finished
