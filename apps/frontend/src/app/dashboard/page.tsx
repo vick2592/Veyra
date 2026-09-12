@@ -53,10 +53,8 @@ export default function DashboardPage() {
 
   return (
     <DashboardShell title="Dashboard">
-      <h2 className="text-4xl font-bold text-(--blue-500) sm:text-5xl">Your hardware vault</h2>
-      <p className="mt-2 text-sm text-(--dark-300)">
-        Register secrets under your Ledger-derived key slot and test the agents that use them.
-      </p>
+      <h2 className="text-4xl font-bold text-(--blue-500) sm:text-5xl">Your Veyra overview</h2>
+      <p className="mt-2 text-sm text-(--dark-300)">Identity, secrets, and agents — all in one place.</p>
 
       {address !== undefined && (
         <div className="mt-8">
