@@ -6,6 +6,7 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { FingerPrintCheckIcon, Wallet01Icon } from '@hugeicons/core-free-icons';
 import { DashboardShell } from '@/components/ui/DashboardShell';
 import { Card } from '@/components/ui/Card';
+import { HubStats } from '@/components/dashboard/HubStats';
 import { PendingRequestBanner } from '@/components/dashboard/PendingRequestBanner';
 import { SecretProvisioningCard } from '@/components/dashboard/SecretProvisioningCard';
 import { AgentExecutionCard } from '@/components/dashboard/AgentExecutionCard';
@@ -64,6 +65,10 @@ export default function DashboardPage() {
           <IdentityCard address={address} />
         </div>
       )}
+
+      <div className="mt-6">
+        <HubStats />
+      </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <SecretProvisioningCard
