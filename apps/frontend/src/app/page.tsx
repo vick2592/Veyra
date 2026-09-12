@@ -34,7 +34,7 @@ const features: Feature[] = [
   {
     icon: FaceIdIcon,
     title: 'A real human, every time',
-    body: 'Face Auth proves a live person authorized this — not a bot, not a replayed session.',
+    body: 'Face Auth proves a live person authorized this, not a bot, not a replayed session.',
   },
   {
     icon: LockKeyIcon,
@@ -44,7 +44,7 @@ const features: Feature[] = [
   {
     icon: SecuredNetworkIcon,
     title: 'Every decision, provable',
-    body: 'Authorizations are recorded on-chain — tamper-evident, and checkable by anyone.',
+    body: 'Authorizations are recorded on-chain, tamper-evident, and checkable by anyone.',
   },
 ];
 
@@ -56,7 +56,7 @@ type Step = {
 const steps: Step[] = [
   {
     title: 'Connect & scope',
-    body: 'Connect your wallet and create a secret your agent can request — never hand it over directly.',
+    body: 'Connect your wallet and create a secret your agent can request, never hand it over directly.',
   },
   {
     title: 'Agent requests, you confirm',
@@ -64,7 +64,7 @@ const steps: Step[] = [
   },
   {
     title: 'Executed, recorded',
-    body: 'Veyra executes the scoped request and logs it on-chain — nothing more than what you approved.',
+    body: 'Veyra executes the scoped request and logs it on-chain, nothing more than what you approved.',
   },
 ];
 
@@ -98,7 +98,7 @@ export default function LandingPage() {
                 Humans approve.
               </h1>
               <p className="mt-6 max-w-md text-base leading-7 text-(--dark-300) sm:text-lg">
-                Veyra gives AI agents scoped, revocable access to your secrets — while a real human
+                Veyra gives AI agents scoped, revocable access to your secrets, while a real human
                 approves every action with World ID, on-chain.
               </p>
               <div className="mt-8 flex flex-wrap items-center gap-4">

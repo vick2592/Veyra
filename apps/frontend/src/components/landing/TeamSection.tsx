@@ -12,7 +12,7 @@ type TeamMember = {
 
 const team: TeamMember[] = [
   { name: 'Viktor Khachatryan', role: 'World ID · Ledger · Bazantic', photo: '/team-victor.png', github: 'vick2592' },
-  { name: 'Comfort Khonje', role: 'UI/UX Design · Frontend · Marketing', photo: '/team-comfort.jpeg', github: 'ComfortKhonje' },
+  { name: 'Comfort Khonje', role: 'UI/UX Design · Frontend · Marketing', photo: '/team-comfort-2.jpeg', github: 'ComfortKhonje' },
   { name: 'Sivaji Alla', role: 'Backend · Contracts · Base', photo: '/team-sivaji.jpg', github: 'sivajialla' },
 ];
 
