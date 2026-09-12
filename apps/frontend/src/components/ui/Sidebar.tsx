@@ -5,7 +5,14 @@ import { usePathname } from 'next/navigation';
 import { useAccount, useDisconnect } from 'wagmi';
 import { HugeiconsIcon } from '@hugeicons/react';
 import type { IconSvgElement } from '@hugeicons/react';
-import { Logout03Icon, LockKeyIcon, Pulse01Icon, Robot01Icon, Wrench01Icon } from '@hugeicons/core-free-icons';
+import {
+  DashboardSquare01Icon,
+  Logout03Icon,
+  LockKeyIcon,
+  Pulse01Icon,
+  Robot01Icon,
+  Wrench01Icon,
+} from '@hugeicons/core-free-icons';
 
 type NavItem = {
   href: string;
@@ -14,6 +21,7 @@ type NavItem = {
 };
 
 const topNavItems: NavItem[] = [
+  { href: '/dashboard', icon: DashboardSquare01Icon, label: 'Dashboard' },
   { href: '/agents', icon: Robot01Icon, label: 'Agents' },
   { href: '/secrets', icon: LockKeyIcon, label: 'Secrets' },
   { href: '/activity', icon: Pulse01Icon, label: 'Activity' },
