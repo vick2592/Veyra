@@ -1,13 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { HumanConfirmation } from '@/components/request/HumanConfirmation';
 import type { AccessRequest } from '@/components/request/AccessRequestModal';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 const dummyAgentAddress = '0x0000000000000000000000000000000000000001';
+
+// Same split as /request — qrcode + @worldcoin/idkit only load once this
+// card actually reaches its confirming stage.
+const HumanConfirmation = dynamic(() =>
+  import('@/components/request/HumanConfirmation').then((mod) => mod.HumanConfirmation),
+);
 
 type Stage = 'idle' | 'requesting' | 'confirming' | 'executing' | 'completed' | 'failed';
 

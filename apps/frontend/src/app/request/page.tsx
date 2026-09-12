@@ -2,16 +2,22 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { AccessRequest } from '@/components/request/AccessRequestModal';
 import { TierPolicyResult } from '@/components/request/TierPolicyResult';
-import { HumanConfirmation } from '@/components/request/HumanConfirmation';
 import { GrantedHighRisk } from '@/components/request/GrantedHighRisk';
 import { DeniedExpired } from '@/components/request/DeniedExpired';
 import { HeroStageBanner } from '@/components/request/HeroStageBanner';
 import { Card } from '@/components/ui/Card';
 import { formatErrorMessage } from '@/lib/formatError';
 import { SplitScreenShell } from '@/components/ui/SplitScreenShell';
+
+// Pulls in qrcode + @worldcoin/idkit — only the confirmation stage needs
+// that bundle, so it's split out of /request's initial chunk.
+const HumanConfirmation = dynamic(() =>
+  import('@/components/request/HumanConfirmation').then((mod) => mod.HumanConfirmation),
+);
 
 type FlowStage = 'policy_result' | 'confirmation' | 'approved' | 'denied';
 
