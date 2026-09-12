@@ -52,7 +52,6 @@ const filters: { key: 'all' | AgentStatus; label: string }[] = [
 export default function AgentsPage() {
   const router = useRouter();
   const { address: ownerAddress } = useAccount();
-  const [pendingCount, setPendingCount] = useState(0);
   const [activeFilter, setActiveFilter] = useState<'all' | AgentStatus>('all');
   const [isSimulating, setIsSimulating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -112,7 +111,6 @@ export default function AgentsPage() {
         }
         const body = (await response.json()) as { requests?: PendingRequest[] };
         const requests = body.requests ?? [];
-        setPendingCount(requests.length);
         setModalRequest((current) => {
           if (current !== null) {
             return current;
@@ -186,7 +184,7 @@ export default function AgentsPage() {
   const visibleAgents = agents.filter((agent) => activeFilter === 'all' || agent.status === activeFilter);
 
   return (
-    <DashboardShell title="Agents" pendingCount={pendingCount}>
+    <DashboardShell title="Agents">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-4xl font-bold text-(--blue-500) sm:text-5xl">Manage Your Agents</h2>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { HugeiconsIcon } from '@hugeicons/react';
 import {
   ArrowDown01Icon,
@@ -10,6 +11,8 @@ import {
   Notification03Icon,
 } from '@hugeicons/core-free-icons';
 import { useAccount, useDisconnect } from 'wagmi';
+import { usePendingRequests } from '@/hooks/usePendingRequests';
+import { getActionNarrative, getAgentLabel } from '@/lib/demoNarrative';
 
 export type Tier = 'orb' | 'selfie';
 
@@ -20,20 +23,75 @@ const tierLabel: Record<Tier, string> = {
 
 const explorerBaseUrl = 'https://sepolia.basescan.org/address/';
 
-function NotificationBell({ pendingCount = 0 }: { pendingCount?: number }) {
+/**
+ * Real notification list — the only thing this app can actually notify
+ * about right now is a pending agent request awaiting your confirmation
+ * (same queue /agents polls). Not a general notification system with
+ * fabricated categories; grows if/when there's another real event to show.
+ */
+function NotificationBell() {
+  const [isOpen, setIsOpen] = useState(false);
+  const pendingRequests = usePendingRequests();
+  const pendingCount = pendingRequests.length;
+
   return (
-    <button
-      type="button"
-      aria-label={pendingCount > 0 ? `${pendingCount} pending confirmations` : 'Notifications'}
-      className="relative flex h-12 w-12 items-center justify-center rounded-2xl border border-(--dark-50) bg-white text-(--dark-400) transition hover:bg-(--dark-50)/40"
+    <div
+      className="relative"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setIsOpen(false);
+        }
+      }}
     >
-      <HugeiconsIcon icon={Notification03Icon} size={20} strokeWidth={1.5} />
-      {pendingCount > 0 && (
-        <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-(--purple-500) px-1 text-[11px] font-semibold text-white">
-          {pendingCount}
-        </span>
+      <button
+        type="button"
+        onClick={() => setIsOpen((open) => !open)}
+        aria-expanded={isOpen}
+        aria-label={pendingCount > 0 ? `${pendingCount} pending confirmations` : 'Notifications'}
+        className="relative flex h-12 w-12 items-center justify-center rounded-2xl border border-(--dark-50) bg-white text-(--dark-400) transition hover:bg-(--dark-50)/40"
+      >
+        <HugeiconsIcon icon={Notification03Icon} size={20} strokeWidth={1.5} />
+        {pendingCount > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-(--purple-500) px-1 text-[11px] font-semibold text-white">
+            {pendingCount}
+          </span>
+        )}
+      </button>
+
+      {isOpen && (
+        <div className="animate-veyra-pop-in absolute right-0 top-14 z-50 w-80 rounded-2xl border border-(--dark-50) bg-white p-4 text-sm text-(--dark-400) shadow-[0_16px_48px_rgba(4,8,19,0.16)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-(--dark-300)">Notifications</p>
+
+          <div className="mt-3 flex flex-col gap-2">
+            {pendingRequests.length === 0 ? (
+              <p className="text-sm text-(--dark-300)">No notifications yet.</p>
+            ) : (
+              pendingRequests.map((request) => {
+                const narrative = getActionNarrative(request.secretIdentifier);
+                return (
+                  <div key={request.requestId} className="rounded-xl bg-(--creame) px-3 py-2.5">
+                    <p className="text-sm font-medium text-(--dark-400)">
+                      {getAgentLabel(request.agentAddress)} wants {narrative.headline}
+                    </p>
+                    <p className="mt-0.5 text-xs text-(--dark-300)">Waiting for your confirmation</p>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {pendingRequests.length > 0 && (
+            <Link
+              href="/agents"
+              onClick={() => setIsOpen(false)}
+              className="mt-3 inline-block text-xs font-semibold text-(--purple-500)"
+            >
+              View in Agents
+            </Link>
+          )}
+        </div>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -154,21 +212,13 @@ function WalletChip({ tier }: { tier?: Tier }) {
   );
 }
 
-export function TopBar({
-  title,
-  tier,
-  pendingCount = 0,
-}: {
-  title: string;
-  tier?: Tier;
-  pendingCount?: number;
-}) {
+export function TopBar({ title, tier }: { title: string; tier?: Tier }) {
   return (
     <header className="flex items-center justify-between px-6 py-5 sm:px-10">
       <h1 className="text-2xl font-semibold text-(--dark-400)">{title}</h1>
 
       <div className="flex items-center gap-3">
-        <NotificationBell pendingCount={pendingCount} />
+        <NotificationBell />
         <WalletChip tier={tier} />
       </div>
     </header>

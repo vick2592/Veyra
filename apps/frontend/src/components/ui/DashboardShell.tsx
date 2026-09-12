@@ -10,7 +10,6 @@ import { TopBar, type Tier } from './TopBar';
 type DashboardShellProps = {
   title: string;
   tier?: Tier;
-  pendingCount?: number;
   children: ReactNode;
 };
 
@@ -45,14 +44,14 @@ function ReconnectPrompt() {
   );
 }
 
-export function DashboardShell({ title, tier, pendingCount, children }: DashboardShellProps) {
+export function DashboardShell({ title, tier, children }: DashboardShellProps) {
   const { isConnected } = useAccount();
 
   return (
     <div className="flex min-h-screen bg-(--creame)">
       <Sidebar />
       <div className="flex flex-1 flex-col">
-        <TopBar title={title} tier={tier} pendingCount={pendingCount} />
+        <TopBar title={title} tier={tier} />
         <main className="flex flex-1 flex-col px-6 py-6 sm:px-10">
           {isConnected ? children : <ReconnectPrompt />}
         </main>
