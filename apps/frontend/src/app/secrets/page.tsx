@@ -1,17 +1,22 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { Add01Icon, LockKeyIcon } from '@hugeicons/core-free-icons';
 import { DashboardShell } from '@/components/ui/DashboardShell';
 import { Card } from '@/components/ui/Card';
 import { StatusPill } from '@/components/agents/StatusPill';
-import { AddSecretModal } from '@/components/secrets/AddSecretModal';
 import { formatRelativeTime } from '@/lib/activityLog';
 import { formatErrorMessage } from '@/lib/formatError';
 import { fetchSecretsOf, type SecretSummary } from '@/lib/secrets';
 import { registryAbi, registryAddress } from '@/lib/worldIdAuthorization';
+
+// Opt-in overlay, not needed for the page's first paint.
+const AddSecretModal = dynamic(() =>
+  import('@/components/secrets/AddSecretModal').then((mod) => mod.AddSecretModal),
+);
 
 export default function SecretsPage() {
   const { address, isConnected } = useAccount();
@@ -134,7 +139,9 @@ export default function SecretsPage() {
         )}
       </div>
 
-      <AddSecretModal open={isAddOpen} onClose={() => setIsAddOpen(false)} onCreated={() => void refreshSecrets()} />
+      {isAddOpen && (
+        <AddSecretModal open={isAddOpen} onClose={() => setIsAddOpen(false)} onCreated={() => void refreshSecrets()} />
+      )}
     </DashboardShell>
   );
 }

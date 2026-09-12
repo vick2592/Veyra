@@ -2,19 +2,27 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { useAccount } from 'wagmi';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { Robot01Icon } from '@hugeicons/core-free-icons';
 import { DashboardShell } from '@/components/ui/DashboardShell';
 import { Card } from '@/components/ui/Card';
 import { AccessRequestModal, type PendingRequest } from '@/components/request/AccessRequestModal';
-import { AgentDetailDrawer } from '@/components/agents/AgentDetailDrawer';
-import { RegisterAgentModal } from '@/components/agents/RegisterAgentModal';
 import { StatusPill, type AgentStatus } from '@/components/agents/StatusPill';
 import { DEMO_AGENT_ADDRESS, getAgentLabel } from '@/lib/demoNarrative';
 import { addRegisteredAgent, getRegisteredAgents } from '@/lib/agentDirectory';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
+
+// Both are opt-in overlays (a click away, not needed for the page's first
+// paint) — dynamic() keeps their code out of /agents' initial bundle.
+const AgentDetailDrawer = dynamic(() =>
+  import('@/components/agents/AgentDetailDrawer').then((mod) => mod.AgentDetailDrawer),
+);
+const RegisterAgentModal = dynamic(() =>
+  import('@/components/agents/RegisterAgentModal').then((mod) => mod.RegisterAgentModal),
+);
 
 type DemoAgent = {
   address: string;
@@ -236,22 +244,26 @@ export default function AgentsPage() {
         onCancel={handleCancelRequest}
       />
 
-      <AgentDetailDrawer
-        open={detailAgent !== null}
-        agent={detailAgent}
-        onClose={() => setDetailAgent(null)}
-        disableSimulate={modalRequest !== null}
-        onSimulated={(request) => {
-          setModalRequest(request);
-          setDetailAgent(null);
-        }}
-      />
+      {detailAgent !== null && (
+        <AgentDetailDrawer
+          open={detailAgent !== null}
+          agent={detailAgent}
+          onClose={() => setDetailAgent(null)}
+          disableSimulate={modalRequest !== null}
+          onSimulated={(request) => {
+            setModalRequest(request);
+            setDetailAgent(null);
+          }}
+        />
+      )}
 
-      <RegisterAgentModal
-        open={isRegisterOpen}
-        onClose={() => setIsRegisterOpen(false)}
-        onRegister={handleRegisterAgent}
-      />
+      {isRegisterOpen && (
+        <RegisterAgentModal
+          open={isRegisterOpen}
+          onClose={() => setIsRegisterOpen(false)}
+          onRegister={handleRegisterAgent}
+        />
+      )}
     </DashboardShell>
   );
 }
