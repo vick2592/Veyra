@@ -5,6 +5,7 @@ import type { IconSvgElement } from '@hugeicons/react';
 import { FaceIdIcon, LockKeyIcon, SecuredNetworkIcon } from '@hugeicons/core-free-icons';
 import { FlowingLines } from '@/components/landing/FlowingLines';
 import { GetStartedButton } from '@/components/landing/GetStartedButton';
+import { TeamSection } from '@/components/landing/TeamSection';
 
 const techPartners = ['World ID', 'Base', 'Ledger', 'Bazantic'];
 
@@ -168,6 +169,8 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      <TeamSection />
 
       <section className="px-6 py-20 sm:px-10">
         <div className="mx-auto flex max-w-4xl flex-col items-center gap-6 rounded-[32px] bg-(--dark-500) px-8 py-16 text-center">
