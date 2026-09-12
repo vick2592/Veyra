@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/Card';
 import { StatusPill } from '@/components/agents/StatusPill';
 import { AddSecretModal } from '@/components/secrets/AddSecretModal';
 import { formatRelativeTime } from '@/lib/activityLog';
+import { formatErrorMessage } from '@/lib/formatError';
 import { registryAbi, registryAddress } from '@/lib/worldIdAuthorization';
 
 type SecretRow = {
@@ -60,7 +61,7 @@ export default function SecretsPage() {
       );
       setSecrets(rows.sort((a, b) => Number(b.storedAt) - Number(a.storedAt)));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Secrets could not be loaded.');
+      setErrorMessage(formatErrorMessage(error, 'Secrets could not be loaded.'));
       setSecrets([]);
     }
   }
@@ -86,7 +87,7 @@ export default function SecretsPage() {
       await publicClient.waitForTransactionReceipt({ hash });
       await refreshSecrets();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'The secret could not be revoked.');
+      setErrorMessage(formatErrorMessage(error, 'The secret could not be revoked.'));
     } finally {
       setRevokingId(null);
     }

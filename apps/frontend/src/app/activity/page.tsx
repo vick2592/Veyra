@@ -7,6 +7,7 @@ import { useAccount, usePublicClient } from 'wagmi';
 import { DashboardShell } from '@/components/ui/DashboardShell';
 import { Card } from '@/components/ui/Card';
 import { getActionNarrative, getAgentLabel } from '@/lib/demoNarrative';
+import { formatErrorMessage } from '@/lib/formatError';
 import { registryAddress } from '@/lib/worldIdAuthorization';
 import { fetchAgentAuthorizedLogs, formatRelativeTime, resolveSecretLabel, type ActivityEntry } from '@/lib/activityLog';
 
@@ -35,7 +36,7 @@ export default function ActivityPage() {
       })
       .catch((error: unknown) => {
         if (!active) return;
-        setErrorMessage(error instanceof Error ? error.message : 'Activity could not be loaded.');
+        setErrorMessage(formatErrorMessage(error, 'Activity could not be loaded.'));
         setEntries([]);
       });
 

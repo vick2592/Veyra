@@ -13,6 +13,7 @@ import { RegisterAgentModal } from '@/components/agents/RegisterAgentModal';
 import { StatusPill, type AgentStatus } from '@/components/agents/StatusPill';
 import { DEMO_AGENT_ADDRESS, DEMO_SECRET_IDENTIFIER, getAgentLabel } from '@/lib/demoNarrative';
 import { addRegisteredAgent, getRegisteredAgents } from '@/lib/agentDirectory';
+import { formatErrorMessage } from '@/lib/formatError';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 
@@ -158,7 +159,7 @@ export default function AgentsPage() {
         setModalRequest(body);
       }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'The request could not be sent.');
+      setErrorMessage(formatErrorMessage(error, 'The request could not be sent.'));
     } finally {
       setIsSimulating(false);
     }

@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
+import { formatErrorMessage } from '@/lib/formatError';
 import {
   deriveLeafIndex,
   getMockCiphertext,
@@ -75,7 +76,7 @@ export function useCreateSecret() {
       return true;
     } catch (error) {
       setState('error');
-      setErrorMessage(error instanceof Error ? error.message : 'The secret could not be created.');
+      setErrorMessage(formatErrorMessage(error, 'The secret could not be created.'));
       return false;
     } finally {
       isSubmittingRef.current = false;

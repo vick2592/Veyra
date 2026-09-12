@@ -9,6 +9,7 @@ import { HumanConfirmation } from '@/components/request/HumanConfirmation';
 import { GrantedHighRisk } from '@/components/request/GrantedHighRisk';
 import { DeniedExpired } from '@/components/request/DeniedExpired';
 import { Card } from '@/components/ui/Card';
+import { formatErrorMessage } from '@/lib/formatError';
 import { SplitScreenShell } from '@/components/ui/SplitScreenShell';
 
 type FlowStage = 'policy_result' | 'confirmation' | 'approved' | 'denied';
@@ -44,7 +45,7 @@ function RequestFlow() {
       .then((result) => setRequest(result))
       .catch((error: unknown) => {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
-          setLoadError(error instanceof Error ? error.message : 'Request could not be loaded.');
+          setLoadError(formatErrorMessage(error, 'Request could not be loaded.'));
         }
       });
     return () => controller.abort();

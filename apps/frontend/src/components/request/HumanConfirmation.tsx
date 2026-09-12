@@ -9,6 +9,7 @@ import { IdVerifiedIcon, LockKeyIcon, Tick02Icon } from '@hugeicons/core-free-ic
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { getActionNarrative, getAgentLabel } from '@/lib/demoNarrative';
+import { formatErrorMessage } from '@/lib/formatError';
 import { sendApprovalNotification } from '@/lib/notifications';
 import {
   getOnChainProof,
@@ -140,7 +141,7 @@ export function HumanConfirmation({
       resetIdKit();
       setRpContext(null);
       setStage('awaiting_world_id');
-      setErrorMessage(error instanceof Error ? error.message : 'World ID proof could not be normalized.');
+      setErrorMessage(formatErrorMessage(error, 'World ID proof could not be normalized.'));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idKitResult, isIdKitSuccess]);
@@ -180,7 +181,7 @@ export function HumanConfirmation({
   useEffect(() => {
     if (isTxError && txError !== null) {
       setStage('awaiting_wallet_signature');
-      setErrorMessage(txError.message);
+      setErrorMessage(formatErrorMessage(txError, 'Transaction failed.'));
     }
   }, [isTxError, txError]);
 
@@ -206,7 +207,7 @@ export function HumanConfirmation({
       });
     } catch (error) {
       setStage('awaiting_world_id');
-      setErrorMessage(error instanceof Error ? error.message : 'World ID authorization could not start.');
+      setErrorMessage(formatErrorMessage(error, 'World ID authorization could not start.'));
     }
   }
 
@@ -235,7 +236,7 @@ export function HumanConfirmation({
       setStage('waiting_for_tx');
     } catch (error) {
       setStage('awaiting_wallet_signature');
-      setErrorMessage(error instanceof Error ? error.message : 'Wallet signature failed.');
+      setErrorMessage(formatErrorMessage(error, 'Wallet signature failed.'));
     }
   }
 
