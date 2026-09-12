@@ -15,6 +15,18 @@ export type AgentExecutorConfig = {
 
 type FetchLike = typeof fetch;
 
+async function callAgentProvider(apiKey: string, config: AgentExecutorConfig, fetchImpl: FetchLike): Promise<unknown> {
+  const upstreamResponse = await fetchImpl(config.agentApiUrl, {
+    headers: { authorization: `Bearer ${apiKey}` },
+  });
+
+  if (!upstreamResponse.ok) {
+    throw new Error('Agent provider request failed');
+  }
+
+  return await upstreamResponse.json();
+}
+
 export async function executeAgentWithSecret(
   secretIdentifier: string,
   keyring: SecretKeyring,
@@ -28,15 +40,29 @@ export async function executeAgentWithSecret(
   let apiKey: string | undefined;
   try {
     apiKey = await keyring.decryptSecret('execute-agent');
-    const upstreamResponse = await fetchImpl(config.agentApiUrl, {
-      headers: { authorization: `Bearer ${apiKey}` },
-    });
+    return await callAgentProvider(apiKey, config, fetchImpl);
+  } finally {
+    apiKey = undefined;
+  }
+}
 
-    if (!upstreamResponse.ok) {
-      throw new Error('Agent provider request failed');
-    }
-
-    return await upstreamResponse.json();
+/**
+ * The AgentAuthorized-event-triggered path: unlike executeAgentWithSecret
+ * (which always reads the one shared operator key), this decrypts the
+ * specific ciphertext stored on chain for this user's secret, under their
+ * derived hardware key slot.
+ */
+export async function executeAgentWithUserSecret(
+  userAddress: `0x${string}`,
+  ciphertextHex: string,
+  keyring: SecretKeyring,
+  config: AgentExecutorConfig,
+  fetchImpl: FetchLike = fetch,
+): Promise<unknown> {
+  let apiKey: string | undefined;
+  try {
+    apiKey = await keyring.decryptUserSecret(userAddress, ciphertextHex);
+    return await callAgentProvider(apiKey, config, fetchImpl);
   } finally {
     apiKey = undefined;
   }

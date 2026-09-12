@@ -6,13 +6,36 @@ import {
   type PublicClient,
 } from 'viem';
 import type { AgentExecutorConfig } from '../execute-agent.js';
-import { executeAgentWithSecret } from '../execute-agent.js';
+import { executeAgentWithUserSecret } from '../execute-agent.js';
 import type { SecretKeyring } from '../keyring.js';
 import type { PendingRequestStore } from '../queue/store.js';
 
 const agentAuthorizedAbi = parseAbi([
   'event AgentAuthorized(address indexed user, address indexed agent, bytes32 indexed secretId, uint256 nullifierHash, bytes32 requestId, uint64 authorizedAt)',
 ]);
+
+/** Mirrors VeyraRegistry.sol's getSecret exactly (same shape as the frontend's registryAbi). */
+const registryReadAbi = [
+  {
+    type: 'function',
+    name: 'getSecret',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'user', type: 'address' },
+      { name: 'secretId', type: 'bytes32' },
+    ],
+    outputs: [{
+      type: 'tuple',
+      components: [
+        { name: 'ciphertext', type: 'bytes' },
+        { name: 'label', type: 'string' },
+        { name: 'version', type: 'uint32' },
+        { name: 'storedAt', type: 'uint64' },
+        { name: 'active', type: 'bool' },
+      ],
+    }],
+  },
+] as const;
 
 export type ChainListenerConfig = {
   rpcUrl: string;
@@ -39,9 +62,10 @@ export type ChainListener = {
 
 type AuthorizedLog = {
   args: {
+    user?: `0x${string}`;
     // secretIdentifier is no longer on the event — it is a bytes32 secretId hash now.
     // The plaintext identifier comes from the pending request store instead.
-    secretId?: string;
+    secretId?: `0x${string}`;
     requestId?: string;
   };
   transactionHash: `0x${string}`;
@@ -111,9 +135,16 @@ export function createChainListener(
     }
 
     const requestId = log.args.requestId;
+    const user = log.args.user;
+    const secretId = log.args.secretId;
     if (requestId === undefined || requestId.length === 0) {
       processingLogs.delete(logId);
       logger.error('AgentAuthorized event did not contain a request ID');
+      return;
+    }
+    if (user === undefined || secretId === undefined) {
+      processingLogs.delete(logId);
+      logger.error('AgentAuthorized event did not contain a user or secret ID', { requestId });
       return;
     }
 
@@ -134,8 +165,19 @@ export function createChainListener(
       }
 
       try {
-        const result = await executeAgentWithSecret(
-          pendingRequest.secretIdentifier,
+        const secret = await getClient().readContract({
+          address: config.registryAddress,
+          abi: registryReadAbi,
+          functionName: 'getSecret',
+          args: [user, secretId],
+        });
+        if (!secret.active || secret.ciphertext.length === 0 || secret.ciphertext === '0x') {
+          throw new Error('No active hardware-encrypted secret is stored for this authorization');
+        }
+
+        const result = await executeAgentWithUserSecret(
+          user,
+          secret.ciphertext,
           dependencies.keyring,
           dependencies.agentConfig,
           dependencies.fetchImpl,

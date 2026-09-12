@@ -53,6 +53,7 @@ describe('encryptSecretForUser', () => {
 
     expect(execFileImpl).not.toHaveBeenCalled();
     expect(result.bip32Path).toBe(`m/44'/60'/0'/0/${result.leafIndex}`);
+    expect(result.ciphertextHex.startsWith('0x')).toBe(true);
     const key = deriveKeyFromRoot('veyra-demo-master-secret-not-for-production!!', result.leafIndex);
     expect(decryptWithKey(key, result.ciphertextHex)).toBe('sk-live-abc123');
   });
@@ -135,6 +136,6 @@ describe('createEncryptSecretHandler', () => {
     const payload = response.json.mock.calls[0]?.[0];
     expect(payload).toMatchObject({ success: true });
     expect(payload.bip32Path).toMatch(/^m\/44'\/60'\/0'\/0\/\d+$/);
-    expect(payload.ciphertextHex).toMatch(/^[0-9a-f]+$/);
+    expect(payload.ciphertextHex).toMatch(/^0x[0-9a-f]+$/);
   });
 });

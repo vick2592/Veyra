@@ -52,7 +52,7 @@ export type EncryptSecretDeps = {
 export type EncryptSecretResult = {
   leafIndex: number;
   bip32Path: string;
-  ciphertextHex: string;
+  ciphertextHex: `0x${string}`;
 };
 
 /**
@@ -81,7 +81,12 @@ export async function encryptSecretForUser(
   if (isDemoMode()) {
     const demoMasterSecret = process.env.VAULT_MASTER_SECRET ?? 'veyra-demo-master-secret-not-for-production!!';
     const key = deriveKeyFromRoot(demoMasterSecret, leafIndex);
-    return { leafIndex, bip32Path, ciphertextHex: encryptWithKey(key, secretValue) };
+    // encryptWithKey returns bare hex (no 0x prefix). storeSecret's `bytes`
+    // calldata param needs a real Hex string — the production path below
+    // already prefixes; this branch has to match or the frontend's
+    // writeContractAsync throws on an invalid hex string before it ever
+    // reaches the chain.
+    return { leafIndex, bip32Path, ciphertextHex: `0x${encryptWithKey(key, secretValue)}` };
   }
 
   const execFileImpl = deps.execFileImpl ?? execFileAsync;
