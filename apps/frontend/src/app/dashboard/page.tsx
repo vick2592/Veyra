@@ -8,8 +8,8 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { Add01Icon, ArrowRight02Icon, FingerPrintCheckIcon, Wallet01Icon } from '@hugeicons/core-free-icons';
 import { DashboardShell } from '@/components/ui/DashboardShell';
 import { Card } from '@/components/ui/Card';
+import { AgentRequestsSection } from '@/components/dashboard/AgentRequestsSection';
 import { HubStats } from '@/components/dashboard/HubStats';
-import { PendingRequestBanner } from '@/components/dashboard/PendingRequestBanner';
 import { RecentActivityPreview } from '@/components/dashboard/RecentActivityPreview';
 import { TrustChainVisualizer } from '@/components/dashboard/TrustChainVisualizer';
 import { deriveLeafIndex } from '@/lib/worldIdAuthorization';
@@ -61,22 +61,12 @@ export default function DashboardPage() {
       <h2 className="text-4xl font-bold text-(--blue-500) sm:text-5xl">Your Veyra overview</h2>
       <p className="mt-2 text-sm text-(--dark-300)">Identity, secrets, and agents — all in one place.</p>
 
-      <div className="mt-6">
-        <PendingRequestBanner />
-      </div>
-
-      {address !== undefined && (
-        <div className="mt-8">
-          <IdentityCard address={address} />
-        </div>
-      )}
-
-      <div className="mt-6">
+      <div className="mt-8">
         <HubStats key={refreshKey} />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <RecentActivityPreview key={refreshKey} />
+        {address !== undefined && <IdentityCard address={address} />}
 
         <Card className="flex flex-col gap-4">
           <p className="text-lg font-semibold text-(--dark-400)">Quick actions</p>
@@ -96,6 +86,14 @@ export default function DashboardPage() {
             <HugeiconsIcon icon={ArrowRight02Icon} size={16} strokeWidth={1.5} />
           </Link>
         </Card>
+      </div>
+
+      <div className="mt-6">
+        <AgentRequestsSection />
+      </div>
+
+      <div className="mt-6">
+        <RecentActivityPreview key={refreshKey} />
       </div>
 
       <div className="mt-6">
