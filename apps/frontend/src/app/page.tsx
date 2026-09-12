@@ -70,7 +70,7 @@ export default function LandingPage() {
           <GetStartedButton size="sm" />
         </header>
 
-        <section className="mx-auto flex w-full max-w-6xl flex-1 items-center px-6 py-16 sm:px-10">
+        <section className="mx-auto flex w-full max-w-6xl flex-1 items-center px-6 py-16 sm:px-10 lg:pb-28">
           <div className="grid w-full gap-10 lg:grid-cols-2 lg:items-center lg:gap-16">
             <div>
               <span className="inline-flex items-center rounded-full border border-(--dark-50) px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-(--dark-300)">
