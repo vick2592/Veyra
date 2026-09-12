@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import { HugeiconsIcon } from '@hugeicons/react';
 import type { IconSvgElement } from '@hugeicons/react';
@@ -96,7 +97,14 @@ export default function LandingPage() {
             </div>
 
             <div className="relative aspect-square overflow-hidden rounded-[32px] bg-(--dark-500) lg:aspect-auto lg:h-[480px]">
-              <img src="/hero-trust.png" alt="" className="absolute inset-0 h-full w-full object-cover" />
+              <Image
+                src="/hero-trust.png"
+                alt=""
+                fill
+                priority
+                sizes="(min-width: 1024px) 50vw, 100vw"
+                className="object-cover"
+              />
             </div>
           </div>
         </section>

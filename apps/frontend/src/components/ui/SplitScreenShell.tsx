@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import type { ReactNode } from 'react';
 
 type SplitScreenShellProps = {
@@ -20,10 +21,13 @@ export function SplitScreenShell({ heroImage, heroBanner, children }: SplitScree
         <div className="relative flex flex-1 flex-col overflow-hidden rounded-[32px] bg-(--dark-500) lg:max-w-[47%]">
           {heroImage !== undefined ? (
             <>
-              <img
+              <Image
                 src={heroImage}
                 alt=""
-                className="absolute inset-0 h-full w-full object-cover"
+                fill
+                priority
+                sizes="(min-width: 1024px) 47vw, 100vw"
+                className="object-cover"
               />
               {/* Real photos vary in tone — this keeps the white logo/wordmark
                   legible regardless of what sits behind it, unlike the
