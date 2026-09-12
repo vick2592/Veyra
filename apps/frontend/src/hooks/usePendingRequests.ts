@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useAccount } from 'wagmi';
+import { getDismissedRequestIds } from '@/lib/dismissedRequests';
 
 export type PendingRequestSummary = {
   requestId: string;
@@ -12,10 +14,15 @@ export type PendingRequestSummary = {
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 
 /**
- * Real pending-request polling, shared so the notification bell can show
- * real items instead of a bare count someone has to remember to pass in.
+ * Real pending-request polling, shared so the bell, /agents, and the
+ * Dashboard all agree on what's actually waiting. Filters out anything the
+ * viewer has already dismissed (see lib/dismissedRequests.ts) — the backend
+ * queue has no cancel/deny transition, so a walked-away-from request stays
+ * "pending_human_auth" until it expires; without this filter it kept
+ * reappearing everywhere even after being dismissed once.
  */
 export function usePendingRequests(): PendingRequestSummary[] {
+  const { address } = useAccount();
   const [requests, setRequests] = useState<PendingRequestSummary[]>([]);
 
   useEffect(() => {
@@ -28,7 +35,8 @@ export function usePendingRequests(): PendingRequestSummary[] {
           return;
         }
         const body = (await response.json()) as { requests?: PendingRequestSummary[] };
-        setRequests(body.requests ?? []);
+        const dismissedIds = address === undefined ? [] : getDismissedRequestIds(address);
+        setRequests((body.requests ?? []).filter((request) => !dismissedIds.includes(request.requestId)));
       } catch {
         // Best-effort — the bell just won't update this tick.
       }
@@ -40,7 +48,7 @@ export function usePendingRequests(): PendingRequestSummary[] {
       controller.abort();
       window.clearInterval(interval);
     };
-  }, []);
+  }, [address]);
 
   return requests;
 }

@@ -12,6 +12,7 @@ import { AccessRequestModal, type PendingRequest } from '@/components/request/Ac
 import { StatusPill, type AgentStatus } from '@/components/agents/StatusPill';
 import { DEMO_AGENT_ADDRESS, getAgentLabel } from '@/lib/demoNarrative';
 import { addRegisteredAgent, getRegisteredAgents } from '@/lib/agentDirectory';
+import { dismissRequest } from '@/lib/dismissedRequests';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 
@@ -135,6 +136,9 @@ export default function AgentsPage() {
   function handleCancelRequest() {
     if (modalRequest !== null) {
       setDismissedIds((current) => new Set(current).add(modalRequest.requestId));
+      if (ownerAddress !== undefined) {
+        dismissRequest(ownerAddress, modalRequest.requestId);
+      }
     }
     setModalRequest(null);
   }
