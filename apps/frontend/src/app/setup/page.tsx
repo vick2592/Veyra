@@ -19,11 +19,20 @@ export default function SetupPage() {
   const { address, isConnected } = useAccount();
   const { connect, connectors, status: connectStatus } = useConnect();
   const [secretName, setSecretName] = useState('');
-  const { state: secretState, errorMessage, createSecret, reset: resetSecret } = useCreateSecret();
+  const {
+    state: secretState,
+    errorMessage,
+    createSecret,
+    reset: resetSecret,
+    isWrongChain,
+    isSwitchingChain,
+    requiredChainName,
+    switchToRequiredChain,
+  } = useCreateSecret();
 
   const isConnecting = connectStatus === 'pending';
   const isBusy = secretState === 'registering' || secretState === 'storing';
-  const canCreateSecret = isConnected && secretName.trim().length > 0 && !isBusy;
+  const canCreateSecret = isConnected && secretName.trim().length > 0 && !isBusy && !isWrongChain;
   const canContinue = isConnected && secretState === 'done';
 
   return (
@@ -97,6 +106,21 @@ export default function SetupPage() {
               Create secret
             </Button>
           </div>
+
+          {isConnected && isWrongChain && (
+            <div className="flex items-center gap-3 pl-11">
+              <Button
+                variant="secondary"
+                icon={LockKeyIcon}
+                loading={isSwitchingChain}
+                loadingLabel="Switching network..."
+                onClick={() => switchToRequiredChain()}
+              >
+                Switch to {requiredChainName}
+              </Button>
+              <p className="text-xs text-(--dark-300)">Wrong network for creating a secret.</p>
+            </div>
+          )}
 
           {secretState === 'error' && errorMessage !== null && (
             <p className="pl-11 text-sm text-(--dark-400)">{errorMessage}</p>

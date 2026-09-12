@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
 import { formatErrorMessage } from '@/lib/formatError';
+import { useRequiredChain } from '@/hooks/useRequiredChain';
 import {
   deriveLeafIndex,
   getMockCiphertext,
@@ -22,6 +23,7 @@ export type CreateSecretState = 'idle' | 'registering' | 'storing' | 'done' | 'e
  */
 export function useCreateSecret() {
   const { address } = useAccount();
+  const { isWrongChain, isSwitching: isSwitchingChain, requiredChainName, switchToRequiredChain } = useRequiredChain();
   const { writeContractAsync } = useWriteContract();
   const publicClient = usePublicClient();
   const [state, setState] = useState<CreateSecretState>('idle');
@@ -41,6 +43,11 @@ export function useCreateSecret() {
       registryAddress === undefined ||
       isSubmittingRef.current
     ) {
+      return false;
+    }
+    if (isWrongChain) {
+      setState('error');
+      setErrorMessage(`Switch to ${requiredChainName} before creating a secret.`);
       return false;
     }
     isSubmittingRef.current = true;
@@ -89,5 +96,14 @@ export function useCreateSecret() {
     isSubmittingRef.current = false;
   }
 
-  return { state, errorMessage, createSecret, reset };
+  return {
+    state,
+    errorMessage,
+    createSecret,
+    reset,
+    isWrongChain,
+    isSwitchingChain,
+    requiredChainName,
+    switchToRequiredChain,
+  };
 }

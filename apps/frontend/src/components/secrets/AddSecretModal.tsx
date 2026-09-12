@@ -15,7 +15,16 @@ export function AddSecretModal({
 }) {
   const [name, setName] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
-  const { state, errorMessage, createSecret, reset } = useCreateSecret();
+  const {
+    state,
+    errorMessage,
+    createSecret,
+    reset,
+    isWrongChain,
+    isSwitchingChain,
+    requiredChainName,
+    switchToRequiredChain,
+  } = useCreateSecret();
   const isBusy = state === 'registering' || state === 'storing';
 
   useEffect(() => {
@@ -67,11 +76,25 @@ export function AddSecretModal({
         )}
       </div>
 
+      {isWrongChain && (
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => switchToRequiredChain()}
+            disabled={isSwitchingChain}
+            className="rounded-full border border-(--purple-500) px-4 py-2 text-xs font-semibold text-(--purple-500) transition hover:bg-(--purple-500)/10 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isSwitchingChain ? 'Switching network...' : `Switch to ${requiredChainName}`}
+          </button>
+          <p className="text-xs text-(--dark-300)">Wrong network for creating a secret.</p>
+        </div>
+      )}
+
       <div className="mt-8 flex gap-4">
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={isBusy}
+          disabled={isBusy || isWrongChain}
           className="flex-1 rounded-full bg-(--purple-500) px-6 py-4 text-sm font-semibold text-white transition hover:bg-[#6b4fe6] disabled:cursor-not-allowed disabled:opacity-70"
         >
           {state === 'registering' ? 'Registering...' : state === 'storing' ? 'Creating...' : 'Add secret'}
