@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { HugeiconsIcon } from '@hugeicons/react';
 import {
@@ -12,10 +13,14 @@ import {
 import { useAccount, useConnect } from 'wagmi';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { FullScreenLoader } from '@/components/ui/FullScreenLoader';
 import { SplitScreenShell } from '@/components/ui/SplitScreenShell';
 import { useCreateSecret } from '@/hooks/useCreateSecret';
+import { useSetupStatus } from '@/hooks/useSetupStatus';
 
 export default function SetupPage() {
+  const router = useRouter();
+  const { isReady, isSetUp } = useSetupStatus();
   const { address, isConnected } = useAccount();
   const { connect, connectors, status: connectStatus } = useConnect();
   const [secretName, setSecretName] = useState('');
@@ -34,6 +39,18 @@ export default function SetupPage() {
   const isBusy = secretState === 'registering' || secretState === 'storing';
   const canCreateSecret = isConnected && secretName.trim().length > 0 && !isBusy && !isWrongChain;
   const canContinue = isConnected && secretState === 'done';
+
+  // A wallet that's already registered with a secret is done with Setup —
+  // don't make it redo "Create secret" (a real tx) just to unlock Continue.
+  useEffect(() => {
+    if (isReady && isSetUp) {
+      router.replace('/agents');
+    }
+  }, [isReady, isSetUp, router]);
+
+  if (!isReady || isSetUp) {
+    return <FullScreenLoader />;
+  }
 
   return (
     <SplitScreenShell heroImage="/hero-keyring.png">

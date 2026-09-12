@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { HugeiconsIcon } from '@hugeicons/react';
 import type { IconSvgElement } from '@hugeicons/react';
 import { ArrowRight02Icon, FaceIdIcon, LockKeyIcon, SecuredNetworkIcon } from '@hugeicons/core-free-icons';
+import { EntryGate } from '@/components/landing/EntryGate';
 
 const techPartners = ['World ID', 'Base', 'Ledger', 'Bazantic'];
 
@@ -51,6 +52,7 @@ const steps: Step[] = [
 
 export default function LandingPage() {
   return (
+    <EntryGate>
     <main className="relative bg-(--creame)">
       <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="animate-veyra-drift absolute -left-40 top-[-10%] h-[560px] w-[560px] rounded-full bg-(--purple-500)/10 blur-3xl" />
@@ -201,5 +203,6 @@ export default function LandingPage() {
         </div>
       </footer>
     </main>
+    </EntryGate>
   );
 }
