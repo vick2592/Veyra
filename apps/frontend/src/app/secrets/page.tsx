@@ -10,21 +10,14 @@ import { StatusPill } from '@/components/agents/StatusPill';
 import { AddSecretModal } from '@/components/secrets/AddSecretModal';
 import { formatRelativeTime } from '@/lib/activityLog';
 import { formatErrorMessage } from '@/lib/formatError';
+import { fetchSecretsOf, type SecretSummary } from '@/lib/secrets';
 import { registryAbi, registryAddress } from '@/lib/worldIdAuthorization';
-
-type SecretRow = {
-  secretId: `0x${string}`;
-  label: string;
-  version: number;
-  storedAt: bigint;
-  active: boolean;
-};
 
 export default function SecretsPage() {
   const { address, isConnected } = useAccount();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
-  const [secrets, setSecrets] = useState<SecretRow[] | null>(null);
+  const [secrets, setSecrets] = useState<SecretSummary[] | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -34,32 +27,8 @@ export default function SecretsPage() {
       setSecrets(null);
       return;
     }
-    const registry = registryAddress;
     try {
-      const secretIds = await publicClient.readContract({
-        address: registry,
-        abi: registryAbi,
-        functionName: 'secretIdsOf',
-        args: [address],
-      });
-      const rows = await Promise.all(
-        secretIds.map(async (secretId) => {
-          const secret = await publicClient.readContract({
-            address: registry,
-            abi: registryAbi,
-            functionName: 'getSecret',
-            args: [address, secretId],
-          });
-          return {
-            secretId,
-            label: secret.label,
-            version: secret.version,
-            storedAt: secret.storedAt,
-            active: secret.active,
-          };
-        }),
-      );
-      setSecrets(rows.sort((a, b) => Number(b.storedAt) - Number(a.storedAt)));
+      setSecrets(await fetchSecretsOf(publicClient, address, registryAddress));
     } catch (error) {
       setErrorMessage(formatErrorMessage(error, 'Secrets could not be loaded.'));
       setSecrets([]);
