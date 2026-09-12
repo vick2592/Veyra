@@ -249,6 +249,13 @@ export function HumanConfirmation({
   }
 
   const canDeny = stage === 'awaiting_world_id' || stage === 'preparing_world_id' || stage === 'awaiting_wallet_signature';
+  const isWorldIdConfigMissing = worldAppId.length === 0 || worldRpId.length === 0;
+  const isWalletMissing = address === undefined;
+  const startDisabledReason = isWorldIdConfigMissing
+    ? "World ID isn't configured for this deployment — confirmation is unavailable."
+    : isWalletMissing
+      ? 'Connect a wallet to confirm this request.'
+      : null;
 
   return (
     <Card className="animate-veyra-fade-in flex flex-col gap-6">
@@ -301,16 +308,21 @@ export function HumanConfirmation({
             Confirm in wallet
           </Button>
         ) : (
-          <Button
-            variant="primary"
-            icon={IdVerifiedIcon}
-            loading={stage === 'preparing_world_id' || stage === 'world_id_open'}
-            loadingLabel="Confirming with World ID..."
-            disabled={worldAppId.length === 0 || worldRpId.length === 0 || address === undefined}
-            onClick={() => void handleStartWorldId()}
-          >
-            Confirm with World ID
-          </Button>
+          <div className="flex flex-col gap-2">
+            <Button
+              variant="primary"
+              icon={IdVerifiedIcon}
+              loading={stage === 'preparing_world_id' || stage === 'world_id_open'}
+              loadingLabel="Confirming with World ID..."
+              disabled={isWorldIdConfigMissing || isWalletMissing}
+              onClick={() => void handleStartWorldId()}
+            >
+              Confirm with World ID
+            </Button>
+            {startDisabledReason !== null && (
+              <p className="text-xs text-(--dark-300)">{startDisabledReason}</p>
+            )}
+          </div>
         )}
         {canDeny && (
           <button type="button" onClick={handleDeny} className="text-sm font-semibold text-(--dark-300) hover:text-(--dark-400)">
