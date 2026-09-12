@@ -18,7 +18,7 @@ const anvilChain: Chain = {
   },
 };
 
-const wagmiConfig = createConfig({
+export const wagmiConfig = createConfig({
   chains: [baseSepolia, anvilChain],
   connectors: [injected()],
   transports: {

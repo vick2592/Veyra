@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/Card';
 import { getActionNarrative, getAgentLabel } from '@/lib/demoNarrative';
 import { formatErrorMessage } from '@/lib/formatError';
 import { sendApprovalNotification } from '@/lib/notifications';
+import { useRequiredChain } from '@/hooks/useRequiredChain';
 import {
   getOnChainProof,
   getSecretId,
@@ -66,6 +67,7 @@ export function HumanConfirmation({
   }, []);
 
   const { address } = useAccount();
+  const { isWrongChain, isSwitching: isSwitchingChain, requiredChainName, switchToRequiredChain } = useRequiredChain();
   const { writeContractAsync } = useWriteContract();
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null);
   const { isSuccess: isTxConfirmed, isError: isTxError, error: txError } = useWaitForTransactionReceipt({
@@ -297,7 +299,20 @@ export function HumanConfirmation({
       {errorMessage !== null && <p className="text-sm text-(--dark-400)">{errorMessage}</p>}
 
       <div className="flex items-center gap-4">
-        {stage === 'awaiting_wallet_signature' || stage === 'submitting_tx' || stage === 'waiting_for_tx' ? (
+        {stage === 'awaiting_wallet_signature' && isWrongChain ? (
+          <div className="flex flex-col gap-2">
+            <Button
+              variant="primary"
+              icon={LockKeyIcon}
+              loading={isSwitchingChain}
+              loadingLabel="Switching network..."
+              onClick={() => switchToRequiredChain()}
+            >
+              Switch to {requiredChainName}
+            </Button>
+            <p className="text-xs text-(--dark-300)">Your wallet is on the wrong network to sign this.</p>
+          </div>
+        ) : stage === 'awaiting_wallet_signature' || stage === 'submitting_tx' || stage === 'waiting_for_tx' ? (
           <Button
             variant="primary"
             icon={LockKeyIcon}
