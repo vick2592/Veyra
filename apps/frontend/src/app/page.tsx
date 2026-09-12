@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { HugeiconsIcon } from '@hugeicons/react';
 import type { IconSvgElement } from '@hugeicons/react';
 import { FaceIdIcon, LockKeyIcon, SecuredNetworkIcon } from '@hugeicons/core-free-icons';
+import { FlowingLines } from '@/components/landing/FlowingLines';
 import { GetStartedButton } from '@/components/landing/GetStartedButton';
 
 const techPartners = ['World ID', 'Base', 'Ledger', 'Bazantic'];
@@ -53,10 +54,9 @@ const steps: Step[] = [
 
 export default function LandingPage() {
   return (
-    <main className="relative bg-(--creame)">
-      <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div className="animate-veyra-drift absolute -left-40 top-[-10%] h-[560px] w-[560px] rounded-full bg-(--purple-500)/10 blur-3xl" />
-        <div className="animate-veyra-drift-slow absolute -right-40 top-1/3 h-[600px] w-[600px] rounded-full bg-(--blue-500)/10 blur-3xl" />
+    <main className="relative isolate bg-(--creame)">
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <FlowingLines />
       </div>
 
       <div className="relative flex min-h-screen flex-col">
