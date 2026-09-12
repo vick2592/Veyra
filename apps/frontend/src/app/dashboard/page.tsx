@@ -13,7 +13,6 @@ import { deriveLeafIndex } from '@/lib/worldIdAuthorization';
 
 function IdentityCard({ address }: { address: `0x${string}` }) {
   const leafIndex = deriveLeafIndex(address);
-  const bip32Path = `m/44'/60'/0'/0/${leafIndex}`;
 
   return (
     <Card className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -33,7 +32,6 @@ function IdentityCard({ address }: { address: `0x${string}` }) {
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.1em] text-(--dark-300)">Hardware key slot</p>
           <p className="font-mono text-sm text-(--dark-400)">veyra-user-{leafIndex}</p>
-          <p className="font-mono text-xs text-(--dark-300)">{bip32Path}</p>
         </div>
         <span className="flex items-center gap-1.5 rounded-full bg-[#DCFCE7] px-3 py-1 text-xs font-semibold text-[#15803D]">
           <HugeiconsIcon icon={FingerPrintCheckIcon} size={12} strokeWidth={2} />
