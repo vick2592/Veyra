@@ -7,7 +7,22 @@ import { FlowingLines } from '@/components/landing/FlowingLines';
 import { GetStartedButton } from '@/components/landing/GetStartedButton';
 import { TeamSection } from '@/components/landing/TeamSection';
 
-const techPartners = ['World ID', 'Base', 'Ledger', 'Bazantic'];
+type Partner = {
+  name: string;
+  logo: string;
+  width: number;
+  height: number;
+  /** Bazantic's mark is a light cream, invisible on this page's light bg —
+   * needs a dark tile behind it. The others are black-on-transparent. */
+  darkBg?: boolean;
+};
+
+const techPartners: Partner[] = [
+  { name: 'World ID', logo: '/partners/world.png', width: 784, height: 214 },
+  { name: 'Base', logo: '/partners/base.png', width: 800, height: 202 },
+  { name: 'Ledger', logo: '/partners/ledger.png', width: 1407, height: 498 },
+  { name: 'Bazantic', logo: '/partners/bazantic.png', width: 1670, height: 772, darkBg: true },
+];
 
 type Feature = {
   icon: IconSvgElement;
@@ -116,12 +131,23 @@ export default function LandingPage() {
           <p className="text-center text-xs font-semibold uppercase tracking-[0.14em] text-(--dark-300)">
             Built on real infrastructure
           </p>
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-4">
-            {techPartners.map((partner) => (
-              <span key={partner} className="text-sm font-semibold text-(--dark-300)">
-                {partner}
-              </span>
-            ))}
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-6">
+            {techPartners.map((partner) =>
+              partner.darkBg === true ? (
+                <span key={partner.name} className="flex h-10 items-center rounded-xl bg-(--dark-500) px-4">
+                  <Image src={partner.logo} alt={partner.name} width={partner.width} height={partner.height} className="h-4 w-auto" />
+                </span>
+              ) : (
+                <Image
+                  key={partner.name}
+                  src={partner.logo}
+                  alt={partner.name}
+                  width={partner.width}
+                  height={partner.height}
+                  className="h-6 w-auto opacity-70 sm:h-7"
+                />
+              ),
+            )}
           </div>
         </div>
       </section>
@@ -190,9 +216,20 @@ export default function LandingPage() {
             <span className="text-sm font-semibold text-(--dark-400)">Veyra</span>
           </div>
           <p className="text-xs text-(--dark-300)">Scoped access for AI agents.</p>
-          <Link href="/sandbox" className="text-xs text-(--dark-300) underline underline-offset-4 hover:text-(--dark-400)">
-            Open developer sandbox
-          </Link>
+          <div className="flex items-center gap-4">
+            <a
+              href="https://github.com/vick2592/Veyra"
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-(--dark-300) underline underline-offset-4 hover:text-(--dark-400)"
+            >
+              GitHub
+            </a>
+            <Link href="/sandbox" className="text-xs text-(--dark-300) underline underline-offset-4 hover:text-(--dark-400)">
+              Open developer sandbox
+            </Link>
+          </div>
+          <p className="text-xs text-(--dark-300)">© 2026 Veyra. Built for ETHOnline 2026.</p>
         </div>
       </footer>
     </main>

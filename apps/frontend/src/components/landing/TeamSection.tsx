@@ -12,8 +12,8 @@ type TeamMember = {
 
 const team: TeamMember[] = [
   { name: 'Viktor Khachatryan', role: 'World ID · Ledger · Graph', photo: '/team-victor.png', github: 'vick2592' },
-  { name: 'Comfort Khonje', role: 'Frontend · Design · Demo', photo: '/team-comfort.jpeg' },
-  { name: 'Sivaji Alla', role: 'Backend · Contracts', photo: '/team-sivaji.jpg' },
+  { name: 'Comfort Khonje', role: 'Frontend · Design · Demo', photo: '/team-comfort.jpeg', github: 'ComfortKhonje' },
+  { name: 'Sivaji Alla', role: 'Backend · Contracts', photo: '/team-sivaji.jpg', github: 'sivajialla' },
 ];
 
 export function TeamSection() {
@@ -21,7 +21,7 @@ export function TeamSection() {
     <section className="mx-auto max-w-6xl px-6 py-20 sm:px-10">
       <div className="mx-auto max-w-2xl text-center">
         <h2 className="text-3xl font-bold text-(--blue-500) sm:text-4xl">Built by three people</h2>
-        <p className="mt-4 text-base leading-7 text-(--dark-300)">One weekend, one hackathon, one demo.</p>
+        <p className="mt-4 text-base leading-7 text-(--dark-300)">One week, ETHOnline 2026, one working demo.</p>
       </div>
 
       <div className="mt-12 grid gap-6 sm:grid-cols-3">
