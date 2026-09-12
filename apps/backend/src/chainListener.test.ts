@@ -42,8 +42,6 @@ function createHarness(pollingIntervalMs = 10_000) {
   const client = {
     getBlockNumber,
     getLogs,
-    getBlockNumber,
-    getLogs,
     waitForTransactionReceipt,
     readContract,
   } as unknown as PublicClient;
@@ -64,8 +62,6 @@ function createHarness(pollingIntervalMs = 10_000) {
 
   return {
     listener,
-    getBlockNumber,
-    getLogs,
     getBlockNumber,
     getLogs,
     waitForTransactionReceipt,
@@ -94,7 +90,6 @@ async function flushAsync(): Promise<void> {
 }
 
 describe('chain listener', () => {
-  it('polls the configured registry address for AgentAuthorized logs', async () => {
   it('polls the configured registry address for AgentAuthorized logs', async () => {
     const harness = createHarness();
     harness.listener.start();
