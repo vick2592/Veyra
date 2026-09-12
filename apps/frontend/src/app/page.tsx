@@ -57,58 +57,60 @@ export default function LandingPage() {
         <div className="animate-veyra-drift-slow absolute -right-40 top-1/3 h-[600px] w-[600px] rounded-full bg-(--blue-500)/10 blur-3xl" />
       </div>
 
-      <header className="relative mx-auto flex max-w-6xl items-center justify-between px-6 py-6 sm:px-10">
-        <Link href="/" className="flex items-center gap-3">
-          <div style={{ width: 28, height: 24 }}>
-            <img src="/veyra-mark.svg" alt="Veyra" className="h-full w-full object-contain" />
-          </div>
-          <span className="text-lg font-semibold text-(--dark-400)">Veyra</span>
-        </Link>
-        <Link
-          href="/setup"
-          className="inline-flex items-center justify-center rounded-full bg-(--purple-500) px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#6b4fe6]"
-        >
-          Get started
-        </Link>
-      </header>
+      <div className="relative flex min-h-screen flex-col">
+        <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6 sm:px-10">
+          <Link href="/" className="flex items-center gap-3">
+            <div style={{ width: 28, height: 24 }}>
+              <img src="/veyra-mark-dark.svg" alt="Veyra" className="h-full w-full object-contain" />
+            </div>
+            <span className="text-lg font-semibold text-(--dark-400)">Veyra</span>
+          </Link>
+          <Link
+            href="/setup"
+            className="inline-flex items-center justify-center rounded-full bg-(--purple-500) px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#6b4fe6]"
+          >
+            Get started
+          </Link>
+        </header>
 
-      <section className="relative mx-auto flex min-h-screen max-w-6xl items-center px-6 py-16 sm:px-10">
-        <div className="grid w-full gap-10 lg:grid-cols-2 lg:items-center lg:gap-16">
-          <div>
-            <span className="inline-flex items-center rounded-full border border-(--dark-50) px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-(--dark-300)">
-              Agent Capability Broker
-            </span>
-            <h1 className="mt-6 text-[44px] font-bold leading-[1.05] tracking-[-0.02em] text-(--blue-500) sm:text-[64px]">
-              Agents act.
-              <br />
-              Humans approve.
-            </h1>
-            <p className="mt-6 max-w-md text-base leading-7 text-(--dark-300) sm:text-lg">
-              Veyra gives AI agents scoped, revocable access to your secrets — while a real human
-              approves every action with World ID, on-chain.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center gap-4">
-              <Link
-                href="/setup"
-                className="inline-flex min-w-56 items-center justify-center gap-2 rounded-full bg-(--purple-500) px-6 py-4 text-sm font-semibold text-white transition hover:bg-[#6b4fe6]"
-              >
-                Get started
-                <HugeiconsIcon icon={ArrowRight02Icon} size={18} strokeWidth={1.5} />
-              </Link>
-              <a
-                href="#how-it-works"
-                className="text-sm font-semibold text-(--dark-300) underline underline-offset-4 hover:text-(--dark-400)"
-              >
-                See how it works
-              </a>
+        <section className="mx-auto flex w-full max-w-6xl flex-1 items-center px-6 py-16 sm:px-10">
+          <div className="grid w-full gap-10 lg:grid-cols-2 lg:items-center lg:gap-16">
+            <div>
+              <span className="inline-flex items-center rounded-full border border-(--dark-50) px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-(--dark-300)">
+                Agent Capability Broker
+              </span>
+              <h1 className="mt-6 text-[44px] font-bold leading-[1.05] tracking-[-0.02em] text-(--blue-500) sm:text-[64px]">
+                Agents act.
+                <br />
+                Humans approve.
+              </h1>
+              <p className="mt-6 max-w-md text-base leading-7 text-(--dark-300) sm:text-lg">
+                Veyra gives AI agents scoped, revocable access to your secrets — while a real human
+                approves every action with World ID, on-chain.
+              </p>
+              <div className="mt-8 flex flex-wrap items-center gap-4">
+                <Link
+                  href="/setup"
+                  className="inline-flex min-w-56 items-center justify-center gap-2 rounded-full bg-(--purple-500) px-6 py-4 text-sm font-semibold text-white transition hover:bg-[#6b4fe6]"
+                >
+                  Get started
+                  <HugeiconsIcon icon={ArrowRight02Icon} size={18} strokeWidth={1.5} />
+                </Link>
+                <a
+                  href="#how-it-works"
+                  className="text-sm font-semibold text-(--dark-300) underline underline-offset-4 hover:text-(--dark-400)"
+                >
+                  See how it works
+                </a>
+              </div>
+            </div>
+
+            <div className="relative aspect-square overflow-hidden rounded-[32px] bg-(--dark-500) lg:aspect-auto lg:h-[480px]">
+              <img src="/hero-trust.png" alt="" className="absolute inset-0 h-full w-full object-cover" />
             </div>
           </div>
-
-          <div className="relative aspect-square overflow-hidden rounded-[32px] bg-(--dark-500) lg:aspect-auto lg:h-[480px]">
-            <img src="/hero-trust.png" alt="" className="absolute inset-0 h-full w-full object-contain p-10 sm:p-14" />
-          </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <section className="border-t border-(--dark-50) py-10">
         <div className="mx-auto max-w-6xl px-6 sm:px-10">
@@ -188,7 +190,7 @@ export default function LandingPage() {
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-6 text-center sm:px-10">
           <div className="flex items-center gap-3">
             <div style={{ width: 24, height: 20 }}>
-              <img src="/veyra-mark.svg" alt="Veyra" className="h-full w-full object-contain" />
+              <img src="/veyra-mark-dark.svg" alt="Veyra" className="h-full w-full object-contain" />
             </div>
             <span className="text-sm font-semibold text-(--dark-400)">Veyra</span>
           </div>

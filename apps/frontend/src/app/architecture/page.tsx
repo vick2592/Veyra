@@ -44,7 +44,7 @@ export default function ArchitecturePage() {
       <div className="mx-auto max-w-5xl">
         <div className="flex items-center gap-3">
           <div style={{ width: 28, height: 24 }}>
-            <img src="/veyra-mark.svg" alt="Veyra" className="h-full w-full object-contain" />
+            <img src="/veyra-mark-dark.svg" alt="Veyra" className="h-full w-full object-contain" />
           </div>
           <span className="text-lg font-semibold text-(--dark-400)">Veyra</span>
         </div>
