@@ -73,7 +73,7 @@ The platform is fully scaffolded, deployed to **Base Sepolia**, and operational.
 
 #### 2. Human-in-the-Loop Path (World ID Sandbox Flow)
 1. A pending agent action requires access to an existing sensitive secret.
-2. The human opens `/sandbox` or `/dashboard` and initiates World ID Face Auth.
+2. The human opens `/dashboard` and initiates World ID Face Auth.
 3. IDKit generates a ZK proof bound to the static action `"execute-agent"` and the packed signal `encodePacked(user, agent, secretId)`.
 4. The frontend calls `VeyraRegistry.authorizeAgent` on Base Sepolia.
 5. The contract verifies the proof against the World ID Router and emits `AgentAuthorized`.
