@@ -22,26 +22,32 @@ export function HeroStageBanner({
   stage: FlowStage;
   deniedReason: 'user_denied' | 'expired' | null;
 }) {
-  const { icon, solid, caption } = ((): { icon: IconSvgElement; solid: boolean; caption: string } => {
+  const { icon, tone, caption } = ((): { icon: IconSvgElement; tone: 'neutral' | 'success' | 'danger'; caption: string } => {
     switch (stage) {
       case 'policy_result':
-        return { icon: SecuredNetworkIcon, solid: false, caption: 'Request evaluated' };
+        return { icon: SecuredNetworkIcon, tone: 'neutral', caption: 'Request evaluated' };
       case 'confirmation':
-        return { icon: IdVerifiedIcon, solid: false, caption: 'Confirm this action' };
+        return { icon: IdVerifiedIcon, tone: 'neutral', caption: 'Confirm this action' };
       case 'approved':
-        return { icon: Tick02Icon, solid: true, caption: 'Approved — finishing up' };
+        return { icon: Tick02Icon, tone: 'success', caption: 'Approved — finishing up' };
       case 'denied':
-        return { icon: Alert02Icon, solid: false, caption: deniedReason !== null ? denyCaptions[deniedReason] : 'Access denied' };
+        return { icon: Alert02Icon, tone: 'danger', caption: deniedReason !== null ? denyCaptions[deniedReason] : 'Access denied' };
     }
   })();
 
+  const toneClasses: Record<typeof tone, string> = {
+    neutral: 'border border-white/25 text-white',
+    success: 'bg-(--purple-500) text-white',
+    // Denied previously shared the same muted outline as the neutral,
+    // in-progress stages — reading as disabled rather than as the one
+    // outcome most worth noticing. Solid red gives it equal visual
+    // weight to the success state instead of fading into the background.
+    danger: 'bg-[#DC2626] text-white',
+  };
+
   return (
     <>
-      <span
-        className={`flex h-16 w-16 items-center justify-center rounded-full ${
-          solid ? 'bg-(--purple-500) text-white' : 'border border-white/25 text-white'
-        }`}
-      >
+      <span className={`flex h-16 w-16 items-center justify-center rounded-full ${toneClasses[tone]}`}>
         <HugeiconsIcon icon={icon} size={26} strokeWidth={1.5} />
       </span>
       <p className="text-lg font-semibold text-white">{caption}</p>

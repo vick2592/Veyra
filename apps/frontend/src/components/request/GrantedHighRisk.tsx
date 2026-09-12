@@ -144,8 +144,8 @@ export function GrantedHighRisk({
       )}
 
       <div className="mt-10 w-full rounded-2xl border border-(--dark-50) bg-white p-6">
-        <p className="font-mono text-sm text-(--dark-400)">{narrative.technical}</p>
-        <p className="mt-2 font-mono text-sm text-(--dark-400)">{narrative.headline}</p>
+        <p className="text-sm font-semibold text-(--dark-400)">{narrative.headline}</p>
+        <p className="mt-1 font-mono text-xs text-(--dark-300)">{narrative.technical}</p>
         <p className="mt-2 break-all font-mono text-xs text-(--dark-300)">{txHash}</p>
         <a
           href={`https://sepolia.basescan.org/tx/${txHash}`}

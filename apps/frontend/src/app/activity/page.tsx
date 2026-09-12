@@ -85,8 +85,8 @@ export default function ActivityPage() {
                     <span className="w-32 shrink-0 truncate text-sm font-medium text-(--dark-400)">
                       {getAgentLabel(entry.agentAddress)}
                     </span>
-                    <span className="flex-1 truncate font-mono text-xs text-(--dark-300)">
-                      {narrative.technical}
+                    <span className="flex-1 truncate text-sm font-medium text-(--dark-400)">
+                      {narrative.headline}
                     </span>
                     <span className="shrink-0 rounded-full bg-(--purple-500)/10 px-3 py-1 text-xs font-semibold text-(--purple-500)">
                       Allowed
@@ -100,6 +100,7 @@ export default function ActivityPage() {
                   </button>
                   {isExpanded && (
                     <div className="grid gap-1 border-t border-(--dark-50) bg-(--creame) px-6 py-4 font-mono text-xs text-(--dark-300) sm:grid-cols-2">
+                      <span>action: {narrative.technical}</span>
                       <span>agent: {entry.agentAddress}</span>
                       <span>secret: {resolveSecretLabel(entry.secretId)}</span>
                       <span>request_id: {entry.requestId}</span>

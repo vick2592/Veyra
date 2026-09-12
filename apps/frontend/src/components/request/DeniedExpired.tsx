@@ -30,14 +30,14 @@ export function DeniedExpired({
 
   return (
     <div className="animate-veyra-fade-in flex flex-col items-center text-center">
-      <h1 className="text-[40px] font-semibold leading-[1.05] tracking-[-0.02em] text-(--blue-500) sm:text-[52px]">
+      <h1 className="text-[40px] font-semibold leading-[1.05] tracking-[-0.02em] text-[#DC2626] sm:text-[52px]">
         {copy.heading}
       </h1>
       <p className="mt-5 max-w-md text-base leading-7 text-(--dark-300)">{copy.body}</p>
 
       <div className="mt-10 w-full rounded-2xl border border-(--dark-50) bg-white p-6">
-        <p className="font-mono text-sm text-(--dark-400)">{narrative.technical}</p>
-        <p className="mt-2 font-mono text-sm text-(--dark-400)">{narrative.headline}</p>
+        <p className="text-sm font-semibold text-(--dark-400)">{narrative.headline}</p>
+        <p className="mt-1 font-mono text-xs text-(--dark-300)">{narrative.technical}</p>
       </div>
 
       <p className="mt-6 text-sm text-(--dark-300)">No key was ever exposed.</p>
