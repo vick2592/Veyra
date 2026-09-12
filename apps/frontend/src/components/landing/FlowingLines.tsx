@@ -31,13 +31,13 @@ export function FlowingLines() {
           key={index}
           d={buildPath(index)}
           stroke={index % 2 === 0 ? 'var(--purple-500)' : 'var(--blue-500)'}
-          strokeWidth={1 + index * 0.15}
+          strokeWidth={0.4 + index * 0.08}
           strokeLinecap="round"
           className="animate-veyra-line-flow"
           style={{
             opacity: 0.1 + index * 0.02,
-            animationDelay: `${index * -3.5}s`,
-            animationDuration: `${26 + index * 4}s`,
+            animationDelay: `${index * -1.8}s`,
+            animationDuration: `${11 + index * 1.5}s`,
           }}
         />
       ))}
