@@ -1,0 +1,169 @@
+openapi: 3.0.3
+info:
+  title: Veyra Autonomous Hardware Broker
+  description: Hardware-secured AI execution layer utilizing deterministic Ledger BIP-32 leaves for isolated agent execution.
+  version: 1.0.0
+servers:
+  - url: https://yoga-delouse-thread.ngrok-free.dev
+paths:
+  /api/secrets/encrypt:
+    post:
+      summary: Encrypt a secret scoped to a user's derived BIP-32 leaf
+      description: |
+        Encrypts a plaintext secret under a key scoped to the user's derived leaf index.
+        The leaf index is deterministically computed from the user's Ethereum address via
+        `keccak256(address) % 2^31`, producing a BIP-32 path of the form `m/44'/60'/0'/0/<leafIndex>`.
+      operationId: encryptSecret
+      tags:
+        - Secrets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncryptSecretRequest'
+      responses:
+        '200':
+          description: Secret successfully encrypted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncryptSecretSuccessResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Hardware encryption failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/execute-agent:
+    post:
+      summary: Execute an agent action after World ID verification
+      description: |
+        Verifies the caller's World ID proof against the on-chain World ID Router,
+        decrypts the user-specific secret from the provided ciphertext using the
+        derived hardware key slot, and executes the agent provider call with the
+        decrypted API key.
+      operationId: executeAgent
+      tags:
+        - Agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteAgentRequest'
+      responses:
+        '200':
+          description: Agent action executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecuteAgentSuccessResponse'
+        '400':
+          description: Validation error or World ID verification rejection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: World ID verification or agent execution failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    EncryptSecretRequest:
+      type: object
+      required:
+        - userAddress
+        - secretLabel
+        - secretValue
+      properties:
+        userAddress:
+          type: string
+          description: A valid Ethereum address (EIP-55 or lowercase checksum).
+          pattern: '^0x[0-9a-fA-F]{40}$'
+          example: '0x8b0da63371eDaADd199C7654d9FaABb448Ab23BC'
+        secretLabel:
+          type: string
+          description: Label identifying the secret. May only contain letters, numbers, dot, dash, and underscore.
+          minLength: 1
+          maxLength: 64
+          pattern: '^[a-zA-Z0-9_.-]+$'
+          example: 'openai-key'
+        secretValue:
+          type: string
+          description: The plaintext secret value to encrypt.
+          minLength: 1
+          example: 'sk-abc123'
+    EncryptSecretSuccessResponse:
+      type: object
+      required:
+        - success
+        - bip32Path
+        - ciphertextHex
+      properties:
+        success:
+          type: boolean
+          example: true
+        bip32Path:
+          type: string
+          description: The derived BIP-32 path identifying the user's key leaf.
+          pattern: "^m/44'/60'/0'/0/[0-9]+$"
+          example: "m/44'/60'/0'/0/1234567890"
+        ciphertextHex:
+          type: string
+          description: The encrypted ciphertext as a 0x-prefixed hex string.
+          pattern: '^0x[0-9a-fA-F]+$'
+          example: '0x1234567890abcdef'
+    ExecuteAgentRequest:
+      type: object
+      required:
+        - rp_id
+        - secretIdentifier
+        - idkitResponse
+      properties:
+        rp_id:
+          type: string
+          description: The World ID relying party identifier. Must begin with `rp_`.
+          pattern: '^rp_'
+          example: 'rp_veyra_local'
+        secretIdentifier:
+          type: string
+          description: Identifier for the secret/action to execute.
+          minLength: 1
+          example: 'execute-agent'
+        idkitResponse:
+          description: The raw IDKit verification response payload (arbitrary JSON).
+          type: object
+          additionalProperties: true
+    ExecuteAgentSuccessResponse:
+      type: object
+      required:
+        - action
+        - result
+      properties:
+        action:
+          type: string
+          description: The secret identifier that was executed.
+          example: 'execute-agent'
+        result:
+          description: The raw response from the upstream agent provider.
+          type: object
+          additionalProperties: true
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Human-readable error message.
+          example: 'Secret encryption failed'
