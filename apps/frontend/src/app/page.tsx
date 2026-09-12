@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { HugeiconsIcon } from '@hugeicons/react';
 import type { IconSvgElement } from '@hugeicons/react';
-import { ArrowRight02Icon, FaceIdIcon, LockKeyIcon, SecuredNetworkIcon } from '@hugeicons/core-free-icons';
-import { EntryGate } from '@/components/landing/EntryGate';
+import { FaceIdIcon, LockKeyIcon, SecuredNetworkIcon } from '@hugeicons/core-free-icons';
+import { GetStartedButton } from '@/components/landing/GetStartedButton';
 
 const techPartners = ['World ID', 'Base', 'Ledger', 'Bazantic'];
 
@@ -52,7 +52,6 @@ const steps: Step[] = [
 
 export default function LandingPage() {
   return (
-    <EntryGate>
     <main className="relative bg-(--creame)">
       <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="animate-veyra-drift absolute -left-40 top-[-10%] h-[560px] w-[560px] rounded-full bg-(--purple-500)/10 blur-3xl" />
@@ -67,12 +66,7 @@ export default function LandingPage() {
             </div>
             <span className="text-lg font-semibold text-(--dark-400)">Veyra</span>
           </Link>
-          <Link
-            href="/setup"
-            className="inline-flex items-center justify-center rounded-full bg-(--purple-500) px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#6b4fe6]"
-          >
-            Get started
-          </Link>
+          <GetStartedButton size="sm" />
         </header>
 
         <section className="mx-auto flex w-full max-w-6xl flex-1 items-center px-6 py-16 sm:px-10">
@@ -91,13 +85,7 @@ export default function LandingPage() {
                 approves every action with World ID, on-chain.
               </p>
               <div className="mt-8 flex flex-wrap items-center gap-4">
-                <Link
-                  href="/setup"
-                  className="inline-flex min-w-56 items-center justify-center gap-2 rounded-full bg-(--purple-500) px-6 py-4 text-sm font-semibold text-white transition hover:bg-[#6b4fe6]"
-                >
-                  Get started
-                  <HugeiconsIcon icon={ArrowRight02Icon} size={18} strokeWidth={1.5} />
-                </Link>
+                <GetStartedButton size="lg" />
                 <a
                   href="#how-it-works"
                   className="text-sm font-semibold text-(--dark-300) underline underline-offset-4 hover:text-(--dark-400)"
@@ -178,13 +166,7 @@ export default function LandingPage() {
           <h2 className="max-w-lg text-3xl font-bold text-white sm:text-4xl">
             Give your agents a scoped key, not a raw one.
           </h2>
-          <Link
-            href="/setup"
-            className="inline-flex min-w-56 items-center justify-center gap-2 rounded-full bg-(--purple-500) px-6 py-4 text-sm font-semibold text-white transition hover:bg-[#6b4fe6]"
-          >
-            Get started
-            <HugeiconsIcon icon={ArrowRight02Icon} size={18} strokeWidth={1.5} />
-          </Link>
+          <GetStartedButton size="lg" />
         </div>
       </section>
 
@@ -203,6 +185,5 @@ export default function LandingPage() {
         </div>
       </footer>
     </main>
-    </EntryGate>
   );
 }
