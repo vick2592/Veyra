@@ -8,6 +8,7 @@ import { TierPolicyResult } from '@/components/request/TierPolicyResult';
 import { HumanConfirmation } from '@/components/request/HumanConfirmation';
 import { GrantedHighRisk } from '@/components/request/GrantedHighRisk';
 import { DeniedExpired } from '@/components/request/DeniedExpired';
+import { HeroStageBanner } from '@/components/request/HeroStageBanner';
 import { Card } from '@/components/ui/Card';
 import { formatErrorMessage } from '@/lib/formatError';
 import { SplitScreenShell } from '@/components/ui/SplitScreenShell';
@@ -77,7 +78,7 @@ function RequestFlow() {
   }
 
   return (
-    <SplitScreenShell>
+    <SplitScreenShell heroBanner={request === null ? undefined : <HeroStageBanner stage={stage} deniedReason={deniedReason} />}>
       {request === null ? (
         <Card className="flex flex-col gap-3">
           <p className="text-sm leading-6 text-(--dark-300)">{loadError ?? 'Loading request...'}</p>

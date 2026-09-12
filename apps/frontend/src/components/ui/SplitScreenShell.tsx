@@ -6,14 +6,18 @@ type SplitScreenShellProps = {
    * uses no photo, so every undesigned outcome screen can reuse this without
    * needing a new image asset. */
   heroImage?: string;
+  /** Optional content centered in the remaining space below the logo — an
+   * icon + short caption mirroring the current step, so the dark panel
+   * isn't just an empty gradient on flows with no photo (e.g. /request). */
+  heroBanner?: ReactNode;
   children: ReactNode;
 };
 
-export function SplitScreenShell({ heroImage, children }: SplitScreenShellProps) {
+export function SplitScreenShell({ heroImage, heroBanner, children }: SplitScreenShellProps) {
   return (
     <main className="min-h-screen bg-(--creame) p-4">
       <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-[1920px] flex-col gap-4 lg:flex-row">
-        <div className="relative flex-1 overflow-hidden rounded-[32px] bg-(--dark-500) lg:max-w-[47%]">
+        <div className="relative flex flex-1 flex-col overflow-hidden rounded-[32px] bg-(--dark-500) lg:max-w-[47%]">
           {heroImage !== undefined ? (
             <>
               <img
@@ -51,6 +55,12 @@ export function SplitScreenShell({ heroImage, children }: SplitScreenShellProps)
               Veyra
             </span>
           </div>
+
+          {heroBanner !== undefined && (
+            <div className="relative flex flex-1 flex-col items-center justify-center gap-4 px-10 pb-16 text-center">
+              {heroBanner}
+            </div>
+          )}
         </div>
 
         <div className="flex flex-1 items-center justify-center px-6 py-12 sm:px-10">
