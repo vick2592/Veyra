@@ -179,7 +179,15 @@ export function createChainListener(
       // On subsequent polls, start from lastPolledBlock (no re-scan beyond window).
       let fromBlock: bigint;
       if (lastPolledBlock === undefined) {
-        fromBlock = config.startingBlock ?? latestBlock - BLOCK_SCAN_WINDOW;
+        if (config.startingBlock === undefined) {
+          fromBlock = latestBlock > BLOCK_SCAN_WINDOW ? latestBlock - BLOCK_SCAN_WINDOW : 0n;
+          logger.info('LISTENER_STARTING_BLOCK not set — starting dynamically from latest - 10', {
+            latestBlock: latestBlock.toString(),
+            fromBlock: fromBlock.toString(),
+          });
+        } else {
+          fromBlock = config.startingBlock;
+        }
         if (fromBlock < 0n) {
           fromBlock = 0n;
         }

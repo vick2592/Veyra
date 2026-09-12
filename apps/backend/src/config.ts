@@ -24,7 +24,13 @@ const configSchema = z.object({
   RPC_URL: z.string().url().optional(),
   CHAIN_ID: z.coerce.number().int().positive().default(84532),
   REGISTRY_ADDRESS: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(),
-  LISTENER_STARTING_BLOCK: z.coerce.bigint().nonnegative().optional(),
+  // An empty string (LISTENER_STARTING_BLOCK= with no value) must be treated
+  // the same as unset. Left to bare z.coerce.bigint(), BigInt('') is 0n, which
+  // would silently pin the listener to scanning from genesis.
+  LISTENER_STARTING_BLOCK: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim().length === 0 ? undefined : value),
+    z.coerce.bigint().nonnegative().optional(),
+  ),
   LISTENER_CONFIRMATIONS: z.coerce.number().int().nonnegative().default(2),
   LISTENER_POLLING_INTERVAL_MS: z.coerce.number().int().positive().default(4_000),
 });
