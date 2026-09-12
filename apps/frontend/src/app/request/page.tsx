@@ -77,6 +77,10 @@ function RequestFlow() {
     router.push('/architecture');
   }
 
+  function handleLeaveWhileExecuting() {
+    router.push('/agents');
+  }
+
   return (
     <SplitScreenShell heroBanner={request === null ? undefined : <HeroStageBanner stage={stage} deniedReason={deniedReason} />}>
       {request === null ? (
@@ -91,7 +95,12 @@ function RequestFlow() {
       ) : stage === 'confirmation' ? (
         <HumanConfirmation request={request} onApproved={handleApproved} onDenied={handleDenied} />
       ) : stage === 'approved' && approvedTxHash !== null ? (
-        <GrantedHighRisk request={request} txHash={approvedTxHash} onContinue={handleContinueToArchitecture} />
+        <GrantedHighRisk
+          request={request}
+          txHash={approvedTxHash}
+          onContinue={handleContinueToArchitecture}
+          onLeave={handleLeaveWhileExecuting}
+        />
       ) : stage === 'denied' && deniedReason !== null ? (
         <DeniedExpired request={request} reason={deniedReason} onContinue={handleContinueToArchitecture} />
       ) : null}
