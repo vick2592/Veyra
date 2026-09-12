@@ -126,6 +126,7 @@ export function createKeyring(
       const leafIndex = leafIndexFromAddress(userAddress);
 
       if (isDemoMode()) {
+        console.info('[keyring] decrypting user secret via demo/software vault (no Ledger involved)', { leafIndex });
         const demoMasterSecret = process.env.VAULT_MASTER_SECRET ?? 'veyra-demo-master-secret-not-for-production!!';
         const key = deriveKeyFromRoot(demoMasterSecret, leafIndex);
         try {
@@ -141,6 +142,7 @@ export function createKeyring(
       }
 
       const keyName = `veyra-user-${leafIndex}`;
+      console.info('[keyring] decrypting user secret via Ledger Key Ring', { leafIndex, keyName });
       const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'veyra-user-secret-'));
       const inputPath = path.join(tempDirectory, 'ciphertext.bin');
       const outputPath = path.join(tempDirectory, 'plaintext.txt');
