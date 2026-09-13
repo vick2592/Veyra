@@ -155,7 +155,11 @@ export function HumanConfirmation({
     resetIdKit();
     setRpContext(null);
     setStage('awaiting_world_id');
-    setErrorMessage(`World ID verification failed: ${idKitErrorCode}.`);
+    setErrorMessage(
+      /nullifier/i.test(idKitErrorCode)
+        ? 'Proof already used. Please generate a fresh World ID proof.'
+        : `World ID verification failed: ${idKitErrorCode}.`,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isIdKitError, idKitErrorCode]);
 
