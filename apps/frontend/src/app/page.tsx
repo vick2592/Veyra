@@ -33,18 +33,18 @@ type Feature = {
 const features: Feature[] = [
   {
     icon: FaceIdIcon,
-    title: 'A real human, every time',
-    body: 'Face Auth proves a live person authorized this, not a bot, not a replayed session.',
+    title: 'Real humans, no bots',
+    body: 'World ID Face Auth proves a living, breathing person authorized the action, preventing automated Sybil attacks.',
   },
   {
     icon: LockKeyIcon,
-    title: 'Never the raw key',
-    body: 'Agents request access to a named secret. They never receive the value itself.',
+    title: 'Locked in physical hardware',
+    body: 'Your API keys are encrypted directly into a Ledger hardware enclave. Agents get the capability, never the raw credential.',
   },
   {
     icon: SecuredNetworkIcon,
-    title: 'Every decision, provable',
-    body: 'Authorizations are recorded on-chain, tamper-evident, and checkable by anyone.',
+    title: 'Agents pay to play',
+    body: 'Integrated with Bazantic x402 gateways, cloud agents pay micro-tolls just to request access, eliminating spam.',
   },
 ];
 
@@ -55,16 +55,16 @@ type Step = {
 
 const steps: Step[] = [
   {
-    title: 'Connect & scope',
-    body: 'Connect your wallet and create a secret your agent can request, never hand it over directly.',
+    title: 'Vault your secrets',
+    body: 'Connect your wallet and lock your sensitive API keys into a hardware-derived Ledger slot.',
   },
   {
-    title: 'Agent requests, you confirm',
-    body: 'An agent asks for access. You approve with World ID, tied to that specific action.',
+    title: 'Agents request & pay',
+    body: 'An autonomous cloud agent hits the Bazantic gateway, paying a small crypto toll to request an action.',
   },
   {
-    title: 'Executed, recorded',
-    body: 'Veyra executes the scoped request and logs it on-chain, nothing more than what you approved.',
+    title: 'You nod, it fires',
+    body: 'Approve the request with a quick World ID scan. Veyra decrypts the key locally and executes the task on-chain.',
   },
 ];
 
@@ -93,13 +93,14 @@ export default function LandingPage() {
                 Agent Capability Broker
               </span>
               <h1 className="mt-6 text-[44px] font-bold leading-[1.05] tracking-[-0.02em] text-(--blue-500) sm:text-[64px]">
-                Agents act.
+                Agents do the heavy lifting.
                 <br />
-                Humans approve.
+                You hold the keys.
               </h1>
               <p className="mt-6 max-w-md text-base leading-7 text-(--dark-300) sm:text-lg">
-                Veyra gives AI agents scoped, revocable access to your secrets, while a real human
-                approves every action with World ID, on-chain.
+                Veyra lets autonomous AI agents pay micro-tolls to execute tasks, while your API
+                keys stay locked in a physical hardware vault. No raw keys exposed. Just secure,
+                human-approved execution.
               </p>
               <div className="mt-8 flex flex-wrap items-center gap-4">
                 <GetStartedButton size="lg" />
@@ -201,7 +202,7 @@ export default function LandingPage() {
       <section className="px-6 py-20 sm:px-10">
         <div className="mx-auto flex max-w-4xl flex-col items-center gap-6 rounded-[32px] bg-(--dark-500) px-8 py-16 text-center">
           <h2 className="max-w-lg text-3xl font-bold text-white sm:text-4xl">
-            Give your agents a scoped key, not a raw one.
+            Give your AI agents capabilities, not credentials.
           </h2>
           <GetStartedButton size="lg" />
         </div>
