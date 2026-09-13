@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
+import { formatErrorMessage } from '@/lib/formatError';
 import {
   deriveLeafIndex,
   getMockEncryptedUserId,
@@ -80,7 +81,7 @@ export function useStoreSecret() {
       return true;
     } catch (error) {
       setState('error');
-      setErrorMessage(error instanceof Error ? error.message : 'The secret could not be stored on-chain.');
+      setErrorMessage(formatErrorMessage(error, 'The secret could not be stored on-chain.'));
       return false;
     }
   }

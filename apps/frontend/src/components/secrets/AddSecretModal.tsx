@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
-import { useCreateSecret } from '@/hooks/useCreateSecret';
+import { TransactionStatus, type TransactionStep } from '@/components/ui/TransactionStatus';
+import { useAddSecret } from '@/hooks/useAddSecret';
+import { useRequiredChain } from '@/hooks/useRequiredChain';
+
+const ADD_SECRET_STEPS: TransactionStep[] = ['encrypting', 'wallet', 'mining', 'success'];
 
 export function AddSecretModal({
   open,
@@ -14,29 +18,33 @@ export function AddSecretModal({
   onCreated: () => void;
 }) {
   const [name, setName] = useState('');
+  const [plaintextValue, setPlaintextValue] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
-  const {
-    state,
-    errorMessage,
-    createSecret,
-    reset,
-    isWrongChain,
-    isSwitchingChain,
-    requiredChainName,
-    switchToRequiredChain,
-  } = useCreateSecret();
-  const isBusy = state === 'registering' || state === 'storing';
+  const { stage, errorMessage, addSecret, reset } = useAddSecret();
+  const { isWrongChain, isSwitching: isSwitchingChain, requiredChainName, switchToRequiredChain } = useRequiredChain();
+  const isBusy = stage === 'encrypting' || stage === 'preparing' || stage === 'awaiting_signature' || stage === 'pending';
+  const activeStep: TransactionStep | null =
+    stage === 'encrypting'
+      ? 'encrypting'
+      : stage === 'preparing' || stage === 'awaiting_signature'
+        ? 'wallet'
+        : stage === 'pending'
+          ? 'mining'
+          : stage === 'confirmed'
+            ? 'success'
+            : null;
 
   useEffect(() => {
-    if (state === 'done') {
+    if (stage === 'confirmed') {
       onCreated();
       handleClose();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state]);
+  }, [stage]);
 
   function handleClose() {
     setName('');
+    setPlaintextValue('');
     setValidationError(null);
     reset();
     onClose();
@@ -47,8 +55,12 @@ export function AddSecretModal({
       setValidationError('Give this secret a name.');
       return;
     }
+    if (plaintextValue.trim().length === 0) {
+      setValidationError('Paste the key or value to encrypt.');
+      return;
+    }
     setValidationError(null);
-    void createSecret(name);
+    void addSecret(name, plaintextValue);
   }
 
   return (
@@ -71,10 +83,35 @@ export function AddSecretModal({
           placeholder="openai-key"
           className="mt-2 w-full rounded-full border border-(--dark-50) bg-white px-5 py-3 text-sm text-(--dark-400) placeholder:text-(--dark-100) focus:border-(--purple-500) focus:outline-none disabled:bg-(--dark-50)/30"
         />
-        {(validationError ?? (state === 'error' ? errorMessage : null)) !== null && (
+      </div>
+
+      <div className="mt-4">
+        <label htmlFor="new-secret-value" className="text-xs font-semibold uppercase tracking-[0.12em] text-(--dark-300)">
+          Value
+        </label>
+        <input
+          id="new-secret-value"
+          type="password"
+          autoComplete="off"
+          value={plaintextValue}
+          onChange={(event) => setPlaintextValue(event.target.value)}
+          disabled={isBusy}
+          placeholder="sk-..."
+          className="mt-2 w-full rounded-full border border-(--dark-50) bg-white px-5 py-3 text-sm text-(--dark-400) placeholder:text-(--dark-100) focus:border-(--purple-500) focus:outline-none disabled:bg-(--dark-50)/30"
+        />
+        <p className="mt-2 text-xs text-(--dark-300)">
+          Encrypted by the hardware key ring before anything reaches the chain — this value is never stored as plaintext.
+        </p>
+        {(validationError ?? (stage === 'error' ? errorMessage : null)) !== null && (
           <p className="mt-2 text-sm text-(--dark-400)">{validationError ?? errorMessage}</p>
         )}
       </div>
+
+      {activeStep !== null && (
+        <div className="mt-4">
+          <TransactionStatus steps={ADD_SECRET_STEPS} active={activeStep} />
+        </div>
+      )}
 
       {isWrongChain && (
         <div className="mt-4 flex items-center gap-3">
@@ -97,7 +134,13 @@ export function AddSecretModal({
           disabled={isBusy || isWrongChain}
           className="flex-1 rounded-full bg-(--purple-500) px-6 py-4 text-sm font-semibold text-white transition hover:bg-[#6b4fe6] disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {state === 'registering' ? 'Registering...' : state === 'storing' ? 'Creating...' : 'Add secret'}
+          {stage === 'encrypting'
+            ? 'Encrypting...'
+            : stage === 'preparing' || stage === 'awaiting_signature'
+              ? 'Confirm in wallet...'
+              : stage === 'pending'
+                ? 'Confirming...'
+                : 'Add secret'}
         </button>
         <button
           type="button"
