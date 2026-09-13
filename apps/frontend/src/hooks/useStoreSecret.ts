@@ -16,13 +16,14 @@ export type StoreSecretState = 'idle' | 'preparing' | 'awaiting_signature' | 'pe
 /**
  * Wraps the on-chain `storeSecret(bytes32 secretId, string label, bytes ciphertext)`
  * write. `secretId` reuses the same `getSecretId(label)` helper every other
- * secret-writing surface (useCreateSecret, /secrets, /sandbox) already uses —
- * the contract's storage is `user => secretId => Secret`, so the id only needs
+ * secret-writing surface (useAddSecret, /sandbox) already uses — the
+ * contract's storage is `user => secretId => Secret`, so the id only needs
  * to distinguish a user's own labels, not embed their address.
  *
  * storeSecret requires `onlyRegistered`, so an unregistered wallet is
- * registered first (same mock-payload registerUser call useCreateSecret.ts
- * already performs) before the real write.
+ * registered first (same mock-payload registerUser call) before the real
+ * write. The registration payload stays a placeholder — only the ciphertext
+ * itself needs to be real, and the contract never inspects either.
  */
 export function useStoreSecret() {
   const { address } = useAccount();

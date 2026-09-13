@@ -15,8 +15,12 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { FullScreenLoader } from '@/components/ui/FullScreenLoader';
 import { SplitScreenShell } from '@/components/ui/SplitScreenShell';
-import { useCreateSecret } from '@/hooks/useCreateSecret';
+import { TransactionStatus, type TransactionStep } from '@/components/ui/TransactionStatus';
+import { useAddSecret } from '@/hooks/useAddSecret';
+import { useRequiredChain } from '@/hooks/useRequiredChain';
 import { useSetupStatus } from '@/hooks/useSetupStatus';
+
+const ADD_SECRET_STEPS: TransactionStep[] = ['encrypting', 'wallet', 'mining', 'success'];
 
 export default function SetupPage() {
   const router = useRouter();
@@ -24,21 +28,25 @@ export default function SetupPage() {
   const { address, isConnected } = useAccount();
   const { connect, connectors, status: connectStatus } = useConnect();
   const [secretName, setSecretName] = useState('');
-  const {
-    state: secretState,
-    errorMessage,
-    createSecret,
-    reset: resetSecret,
-    isWrongChain,
-    isSwitchingChain,
-    requiredChainName,
-    switchToRequiredChain,
-  } = useCreateSecret();
+  const [secretValue, setSecretValue] = useState('');
+  const { stage, errorMessage, addSecret, reset: resetSecret } = useAddSecret();
+  const { isWrongChain, isSwitching: isSwitchingChain, requiredChainName, switchToRequiredChain } = useRequiredChain();
 
   const isConnecting = connectStatus === 'pending';
-  const isBusy = secretState === 'registering' || secretState === 'storing';
-  const canCreateSecret = isConnected && secretName.trim().length > 0 && !isBusy && !isWrongChain;
-  const canContinue = isConnected && secretState === 'done';
+  const isBusy = stage === 'encrypting' || stage === 'preparing' || stage === 'awaiting_signature' || stage === 'pending';
+  const activeStep: TransactionStep | null =
+    stage === 'encrypting'
+      ? 'encrypting'
+      : stage === 'preparing' || stage === 'awaiting_signature'
+        ? 'wallet'
+        : stage === 'pending'
+          ? 'mining'
+          : stage === 'confirmed'
+            ? 'success'
+            : null;
+  const canCreateSecret =
+    isConnected && secretName.trim().length > 0 && secretValue.trim().length > 0 && !isBusy && !isWrongChain;
+  const canContinue = isConnected && stage === 'confirmed';
 
   // A wallet that's already registered with a secret is done with Setup —
   // don't make it redo "Create secret" (a real tx) just to unlock Continue.
@@ -91,20 +99,20 @@ export default function SetupPage() {
 
         <Card className="flex flex-col gap-4">
           <div className="flex items-center gap-3">
-            <StepBadge index={2} complete={secretState === 'done'} />
+            <StepBadge index={2} complete={stage === 'confirmed'} />
             <label htmlFor="secret-name" className="text-base font-medium text-(--dark-400)">
-              Name this secret
+              Create a secret
             </label>
           </div>
 
-          <div className="flex flex-col gap-3 pl-11 sm:flex-row sm:pl-11">
+          <div className="flex flex-col gap-3 pl-11 sm:flex-row">
             <input
               id="secret-name"
               type="text"
               value={secretName}
               onChange={(event) => {
                 setSecretName(event.target.value);
-                if (secretState === 'done' || secretState === 'error') {
+                if (stage === 'confirmed' || stage === 'error') {
                   resetSecret();
                 }
               }}
@@ -112,17 +120,47 @@ export default function SetupPage() {
               placeholder="openai-key"
               className="flex-1 rounded-full border border-(--dark-50) bg-white px-5 py-4 text-sm text-(--dark-400) placeholder:text-(--dark-100) focus:border-(--purple-500) focus:outline-none disabled:bg-(--dark-50)/30"
             />
+            <input
+              id="secret-value"
+              type="password"
+              autoComplete="off"
+              value={secretValue}
+              onChange={(event) => {
+                setSecretValue(event.target.value);
+                if (stage === 'confirmed' || stage === 'error') {
+                  resetSecret();
+                }
+              }}
+              disabled={!isConnected || isBusy}
+              placeholder="sk-..."
+              className="flex-1 rounded-full border border-(--dark-50) bg-white px-5 py-4 text-sm text-(--dark-400) placeholder:text-(--dark-100) focus:border-(--purple-500) focus:outline-none disabled:bg-(--dark-50)/30"
+            />
+          </div>
+
+          <div className="pl-11">
             <Button
               variant="secondary"
               icon={LockKeyIcon}
               loading={isBusy}
-              loadingLabel={secretState === 'registering' ? 'Registering...' : 'Creating...'}
+              loadingLabel={
+                stage === 'encrypting'
+                  ? 'Encrypting...'
+                  : stage === 'preparing' || stage === 'awaiting_signature'
+                    ? 'Confirm in wallet...'
+                    : 'Confirming...'
+              }
               disabled={!canCreateSecret}
-              onClick={() => void createSecret(secretName)}
+              onClick={() => void addSecret(secretName, secretValue)}
             >
               Create secret
             </Button>
           </div>
+
+          {activeStep !== null && (
+            <div className="pl-11">
+              <TransactionStatus steps={ADD_SECRET_STEPS} active={activeStep} />
+            </div>
+          )}
 
           {isConnected && isWrongChain && (
             <div className="flex items-center gap-3 pl-11">
@@ -139,11 +177,11 @@ export default function SetupPage() {
             </div>
           )}
 
-          {secretState === 'error' && errorMessage !== null && (
+          {stage === 'error' && errorMessage !== null && (
             <p className="pl-11 text-sm text-(--dark-400)">{errorMessage}</p>
           )}
 
-          {secretState === 'done' && (
+          {stage === 'confirmed' && (
             <p className="pl-11 text-sm text-(--dark-300)">
               Secret created. Market Agent can now request access to it.
             </p>

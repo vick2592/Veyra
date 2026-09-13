@@ -21,9 +21,9 @@ export function useAddSecret() {
   const store = useStoreSecret();
   const [isEncrypting, setIsEncrypting] = useState(false);
   const [encryptError, setEncryptError] = useState<string | null>(null);
-  // Same synchronous double-submit guard useCreateSecret used to have — the
-  // busy-derived button disable only lands after the first await, leaving a
-  // window for a fast double click to fire this twice.
+  // Synchronous guard — the busy-derived button disable only lands after
+  // the first await, leaving a window for a fast double click to fire this
+  // twice concurrently before React re-renders the disabled button.
   const isSubmittingRef = useRef(false);
 
   async function addSecret(label: string, plaintextValue: string): Promise<boolean> {
