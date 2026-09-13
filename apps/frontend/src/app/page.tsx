@@ -43,7 +43,7 @@ const features: Feature[] = [
   },
   {
     icon: SecuredNetworkIcon,
-    title: 'Agents pay to play',
+    title: 'Agents pay to access',
     body: 'Integrated with Bazantic x402 gateways, cloud agents pay micro-tolls just to request access, eliminating spam.',
   },
 ];
