@@ -55,16 +55,16 @@ type Step = {
 
 const steps: Step[] = [
   {
-    title: 'Vault your secrets',
-    body: 'Connect your wallet and lock your sensitive API keys into a hardware-derived Ledger slot.',
+    title: 'Hardware-Secured Custody',
+    body: 'Connect your wallet and lock your sensitive API keys into a hardware-derived Ledger slot. Raw keys are never exposed to the internet.',
   },
   {
-    title: 'Agents request & pay',
-    body: 'An autonomous cloud agent hits the Bazantic gateway, paying a small crypto toll to request an action.',
+    title: 'Agent Connection & Spam Prevention',
+    body: 'Veyra utilizes the Bazantic gateway to seamlessly connect with cloud agents, collecting micro-payments to prevent spam and monetize secure storage.',
   },
   {
-    title: 'You nod, it fires',
-    body: 'Approve the request with a quick World ID scan. Veyra decrypts the key locally and executes the task on-chain.',
+    title: 'Sybil-Protected Approvals',
+    body: 'Approve execution with a quick World ID Face Auth scan, ensuring a verified human—not a bot or replay attack—authorizes every single action.',
   },
 ];
 
@@ -177,9 +177,9 @@ export default function LandingPage() {
       <section id="how-it-works" className="border-t border-(--dark-50) bg-white py-20">
         <div className="mx-auto max-w-6xl px-6 sm:px-10">
           <div className="mx-auto max-w-2xl text-center">
-            <h2 className="text-3xl font-bold text-(--blue-500) sm:text-4xl">Three steps, every time</h2>
+            <h2 className="text-3xl font-bold text-(--blue-500) sm:text-4xl">Three pillars of trust</h2>
             <p className="mt-4 text-base leading-7 text-(--dark-300)">
-              The same scoped flow, whether it&apos;s the first request or the thousandth.
+              A unified architecture combining hardware custody, AI monetization, and sybil-resistant identity.
             </p>
           </div>
 
