@@ -1,0 +1,43 @@
+version: 1
+
+gateways:
+  - handle: veyra
+    listing:
+      name: "Veyra Agent Capability Broker"
+      category: INFRA
+      tagline: "Agents borrow scoped API capabilities without ever holding the secret"
+
+    upstream:
+      # The ngrok tunnel fronting apps/backend. Swap for a stable HTTPS host
+      # before the tunnel rotates — a dead upstream fails every paid call.
+      url: https://yoga-delouse-thread.ngrok-free.dev
+
+      # Veyra's own routes answer 402 to any request without a payment header.
+      # Bazantic has already settled x402 by the time it forwards, so the
+      # forwarded call would hit that second gate and be rejected. Sending a
+      # shared token in the header Veyra reads (BAZANTIC_PAYMENT_HEADER)
+      # satisfies it. auth: rather than extra_headers: because this is a
+      # credential — extra_headers are stored in plaintext.
+      auth:
+        type: api-key
+        delivery: header
+        header_name: Payment-Signature
+        secret: ${VEYRA_GATEWAY_TOKEN}
+
+    default_price: $0.01
+
+    # This list is the allow-list: the gateway serves exactly what is priced
+    # here and nothing else. /api/secrets/encrypt and /api/bazantic/pending are
+    # deliberately absent — the first takes a plaintext secret, the second
+    # exposes every other caller's queued requests.
+    methods:
+      - verb: POST
+        path: /api/bazantic/requests
+
+      # Polling is free: charging per poll would bill an agent repeatedly for
+      # waiting on the human approval step it cannot control.
+      - verb: GET
+        path: /api/bazantic/requests/{requestId}
+        price: $0
+
+    status: active

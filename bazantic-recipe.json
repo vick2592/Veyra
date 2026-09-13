@@ -1,0 +1,59 @@
+{
+  "name": "Human-Approved Agent Capability",
+  "description": "Runs a sensitive API action that an AI agent is never trusted to run alone. The agent gathers the evidence for the action from a second service, then asks Veyra for the capability. Veyra queues the request and returns immediately — nothing has executed yet. A human must pass a World ID Face Auth liveness check and sign an on-chain authorization before Veyra decrypts the API key from Ledger hardware custody and performs the call. The agent receives the result and never sees the key. Use this when an action needs a real human in the loop: spending money, sending messages as someone, or touching a production credential.",
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "task": {
+        "type": "string",
+        "description": "What the agent wants done, in plain language. Shown to the human who approves it."
+      },
+      "secretIdentifier": {
+        "type": "string",
+        "description": "Allowlisted label of the credential the task needs. Never a raw secret value.",
+        "default": "openai-key"
+      },
+      "agentAddress": {
+        "type": "string",
+        "pattern": "^0x[0-9a-fA-F]{40}$",
+        "description": "Wallet address of the requesting agent, authorized on-chain for this one request."
+      },
+      "lookup": {
+        "type": "string",
+        "description": "What to gather from the second service first, as the evidence the human judges the request on."
+      }
+    },
+    "required": ["task", "agentAddress", "lookup"]
+  },
+  "input_example": {
+    "task": "Summarize this week's Base Sepolia gas trend and post the summary using the team's API key",
+    "secretIdentifier": "openai-key",
+    "agentAddress": "0x685dd8760000000000000000000000000000dEaD",
+    "lookup": "Base Sepolia average gas price over the last 7 days"
+  },
+  "output_example": {
+    "evidence": "Base Sepolia gas averaged 0.0012 gwei over 7 days, down 18% week over week.",
+    "requestId": "0x71152130fccb2cb2cf8fe8033731fe364cf8a2d1eafdfe2feeb6acae02176fcf",
+    "humanApproval": "granted via World ID Face Auth",
+    "status": "completed",
+    "result": "Posted successfully. The agent never held the API key.",
+    "keyExposedToAgent": false
+  },
+  "prompt_template": "You are operating a two-stage capability flow. The agent may gather information freely, but it may NOT perform the sensitive action itself — only a human-approved Veyra capability request can do that.\n\nStage 1 — Evidence. Use the lookup service to gather what the request's `lookup` field asks for. Keep the finding short and factual; this is what the human sees when deciding whether to approve.\n\nStage 2 — Ask for the capability. Call createCapabilityRequest with the `secretIdentifier` (default \"openai-key\" if absent), the `agentAddress`, and a fresh unique `idempotencyKey`. It returns HTTP 202 and a `requestId`. This means QUEUED, NOT DONE — no work has run and no key has been decrypted yet.\n\nStage 3 — Wait for the human. Poll getCapabilityRequest with that `requestId` roughly every 3 seconds. A person has to physically pass a World ID Face Auth liveness check and sign an on-chain authorization, so expect to wait. Statuses: pending_human_auth (still waiting), executing (approved, running), completed (`result` is present), failed (`error` explains why). Poll for up to 5 minutes; if it is still pending_human_auth after that, stop and report that the human did not approve in time. Never retry by creating a second request — reuse the same idempotencyKey.\n\nNever invent a result for a request that did not reach completed, and never claim the action ran when status is pending_human_auth. If the request fails, report the error verbatim.\n\nReturn the evidence you gathered, the requestId, the final status, and the result if completed.\n\n{{inputs}}",
+  "model": "anthropic/claude-opus-5",
+  "tool_bindings": [
+    {
+      "gateway_slug": "REPLACE_WITH_VEYRA_GATEWAY_SLUG",
+      "tool_name": "createCapabilityRequest"
+    },
+    {
+      "gateway_slug": "REPLACE_WITH_VEYRA_GATEWAY_SLUG",
+      "tool_name": "getCapabilityRequest"
+    },
+    {
+      "gateway_slug": "REPLACE_WITH_SECOND_SERVICE_SLUG",
+      "tool_name": "REPLACE_WITH_SECOND_SERVICE_TOOL"
+    }
+  ]
+}

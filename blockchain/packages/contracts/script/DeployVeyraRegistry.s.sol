@@ -17,15 +17,23 @@ import {VeyraRegistry} from "../src/VeyraRegistry.sol";
 ///
 contract DeployVeyraRegistry is Script {
     function run() external returns (CapabilityRegistry capabilityRegistry, VeyraRegistry registry) {
-        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        address deployer = vm.addr(deployerPrivateKey);
-        address registrar = vm.envOr("REGISTRAR_ADDRESS", deployer);
+        uint256 deployerPrivateKey = vm.envOr("DEPLOYER_PRIVATE_KEY", uint256(0));
         address existingAudit = vm.envOr("CAPABILITY_REGISTRY_ADDRESS", address(0));
         uint256 appIdHash = uint256(keccak256(abi.encodePacked("app_30cf964190e1900108f1a3abb75d39c0"))) >> 8;
         uint256 externalNullifier = uint256(keccak256(abi.encodePacked(appIdHash, "execute-agent"))) >> 8;
         address worldIdRouter = vm.envAddress("WORLD_ID_ADDRESS");
 
-        vm.startBroadcast(deployerPrivateKey);
+        // An unset DEPLOYER_PRIVATE_KEY means the key is in a keystore or on a Ledger
+        // and forge supplies the signer via --account/--ledger, which keeps the raw
+        // key out of the environment for real deployments.
+        if (deployerPrivateKey == 0) {
+            vm.startBroadcast();
+        } else {
+            vm.startBroadcast(deployerPrivateKey);
+        }
+
+        (, address deployer,) = vm.readCallers();
+        address registrar = vm.envOr("REGISTRAR_ADDRESS", deployer);
 
         if (existingAudit == address(0)) {
             capabilityRegistry = new CapabilityRegistry();

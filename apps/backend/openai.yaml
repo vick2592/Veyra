@@ -41,6 +41,68 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/bazantic/requests:
+    post:
+      summary: Queue a capability request for human World ID approval
+      description: |
+        The agent-facing entry point. Submits a request for a capability that a
+        human must approve with World ID Face Auth before it executes. Returns
+        202 with a requestId immediately; the work has NOT run yet. Poll
+        getCapabilityRequest until status is completed or failed.
+
+        The agent never receives the API key the work is performed with.
+      operationId: createCapabilityRequest
+      tags:
+        - Capability
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCapabilityRequest'
+      responses:
+        '202':
+          description: Queued and awaiting human authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapabilityRequestStatus'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/bazantic/requests/{requestId}:
+    get:
+      summary: Poll a capability request until a human approves it
+      description: |
+        Returns the current state: pending_human_auth, executing, completed, or
+        failed. `result` appears only on completed. Poll every few seconds — a
+        human has to physically pass a Face Auth check, so this is not instant.
+      operationId: getCapabilityRequest
+      tags:
+        - Capability
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^0x[0-9a-fA-F]{64}$'
+      responses:
+        '200':
+          description: Current status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapabilityRequestStatus'
+        '404':
+          description: Not found or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/execute-agent:
     post:
       summary: Execute an agent action after World ID verification
@@ -158,6 +220,69 @@ components:
           description: The raw response from the upstream agent provider.
           type: object
           additionalProperties: true
+    CreateCapabilityRequest:
+      type: object
+      required:
+        - secretIdentifier
+        - agentAddress
+        - idempotencyKey
+      properties:
+        secretIdentifier:
+          type: string
+          minLength: 1
+          description: Allowlisted secret label. Never a raw secret value.
+          example: 'openai-key'
+        agentAddress:
+          type: string
+          pattern: '^0x[0-9a-fA-F]{40}$'
+          description: Wallet address authorized on-chain for this request.
+        input:
+          description: Optional provider input forwarded to the capability.
+        idempotencyKey:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Stable key; retrying with the same key returns the original request.
+        expiresAt:
+          type: string
+          format: date-time
+    CapabilityRequestStatus:
+      type: object
+      required:
+        - requestId
+        - status
+        - createdAt
+        - updatedAt
+        - expiresAt
+      properties:
+        requestId:
+          type: string
+          pattern: '^0x[0-9a-fA-F]{64}$'
+        status:
+          type: string
+          enum: [pending_human_auth, executing, completed, failed]
+        agentAddress:
+          type: string
+        secretIdentifier:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        result:
+          description: Present only when status is completed.
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
     ErrorResponse:
       type: object
       required:

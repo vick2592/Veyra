@@ -4,6 +4,8 @@ import { createBazanticRouter } from './routes/bazantic.js';
 import { createPendingRequestStore } from './queue/store.js';
 import { createBazanticAdapter } from './services/bazantic.js';
 import express from 'express';
+import { createApp } from './app.js';
+import { loadConfig } from './config.js';
 
 function createHarness() {
   const app = express();
@@ -117,5 +119,49 @@ describe('pending request store', () => {
     expect(store.claimForExecution('request-1')).toBeUndefined();
     expect(() => store.transition('request-1', 'completed', {result: {ok: true}})).not.toThrow();
     expect(() => store.transition('request-1', 'executing')).toThrow(/Invalid pending request transition/);
+  });
+});
+describe('gateway token settlement (the real adapter, not a mock)', () => {
+  const baseConfig = {
+    ...loadConfig({
+      NODE_ENV: 'test',
+      BAZANTIC_PAY_TO: '0x685dd8760000000000000000000000000000dEaD',
+    } as NodeJS.ProcessEnv),
+  };
+  const body = {
+    secretIdentifier: 'openai-key',
+    agentAddress: '0x685dd8760000000000000000000000000000dEaD',
+    idempotencyKey: 'gw-1',
+  };
+
+  it('rejects an arbitrary payment header once a gateway token is configured', async () => {
+    const app = createApp({...baseConfig, gatewayToken: 'a'.repeat(32)});
+    const response = await request(app)
+      .post('/api/bazantic/requests')
+      .set('Payment-Signature', 'totally-fake-not-a-real-payment')
+      .send(body);
+
+    expect(response.status).toBe(402);
+  });
+
+  it('accepts the configured gateway token', async () => {
+    const token = 'a'.repeat(32);
+    const app = createApp({...baseConfig, gatewayToken: token});
+    const response = await request(app)
+      .post('/api/bazantic/requests')
+      .set('Payment-Signature', token)
+      .send({...body, idempotencyKey: 'gw-2'});
+
+    expect(response.status).toBe(202);
+  });
+
+  it('stays permissive when no gateway token is set, so the local sandbox still works', async () => {
+    const app = createApp(baseConfig);
+    const response = await request(app)
+      .post('/api/bazantic/requests')
+      .set('Payment-Signature', 'sandbox-payment-123')
+      .send({...body, idempotencyKey: 'gw-3'});
+
+    expect(response.status).toBe(202);
   });
 });

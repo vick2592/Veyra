@@ -20,6 +20,11 @@ const configSchema = z.object({
   BAZANTIC_PAY_TO: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(),
   BAZANTIC_AMOUNT: z.string().regex(/^\d+$/).default('10000'),
   BAZANTIC_MAX_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(300),
+  // Shared secret the Bazantic gateway sends in BAZANTIC_PAYMENT_HEADER. Bazantic
+  // settles x402 before forwarding, so this is what proves a call came through the
+  // gateway rather than straight off the public tunnel. Left unset, any non-empty
+  // header value is accepted — fine for the local sandbox, not for a public URL.
+  VEYRA_GATEWAY_TOKEN: z.string().min(16).optional(),
   PENDING_REQUEST_TTL_MS: z.coerce.number().int().positive().default(15 * 60 * 1_000),
   RPC_URL: z.string().url().optional(),
   CHAIN_ID: z.coerce.number().int().positive().default(84532),
@@ -53,6 +58,7 @@ export type AppConfig = {
   bazanticPayTo?: `0x${string}`;
   bazanticAmount: string;
   bazanticMaxTimeoutSeconds: number;
+  gatewayToken?: string;
   pendingRequestTtlMs: number;
   rpcUrl?: string;
   chainId: number;
@@ -83,6 +89,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     ...(parsed.BAZANTIC_PAY_TO === undefined ? {} : {bazanticPayTo: parsed.BAZANTIC_PAY_TO as `0x${string}`}),
     bazanticAmount: parsed.BAZANTIC_AMOUNT,
     bazanticMaxTimeoutSeconds: parsed.BAZANTIC_MAX_TIMEOUT_SECONDS,
+    ...(parsed.VEYRA_GATEWAY_TOKEN === undefined ? {} : {gatewayToken: parsed.VEYRA_GATEWAY_TOKEN}),
     pendingRequestTtlMs: parsed.PENDING_REQUEST_TTL_MS,
     ...(parsed.RPC_URL === undefined ? {} : { rpcUrl: parsed.RPC_URL }),
     chainId: parsed.CHAIN_ID,
