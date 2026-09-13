@@ -92,9 +92,22 @@ export default function SecretsPage() {
             <p className="text-sm text-(--dark-300)">Connect your wallet to see your secrets.</p>
           </Card>
         ) : secrets === null ? (
-          <Card>
-            <p className="text-sm text-(--dark-300)">Loading secrets...</p>
-          </Card>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {[0, 1, 2].map((index) => (
+              <Card key={index} className="flex flex-col gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="h-10 w-10 shrink-0 animate-pulse rounded-xl bg-(--dark-50)" />
+                  <div className="min-w-0 flex-1">
+                    <span className="block h-4 w-2/3 animate-pulse rounded-full bg-(--dark-50)" />
+                    <span className="mt-2 block h-3 w-1/3 animate-pulse rounded-full bg-(--dark-50)" />
+                  </div>
+                </div>
+                <div className="border-t border-(--dark-50) pt-4">
+                  <span className="block h-3 w-1/2 animate-pulse rounded-full bg-(--dark-50)" />
+                </div>
+              </Card>
+            ))}
+          </div>
         ) : secrets.length === 0 ? (
           <Card>
             <p className="text-sm text-(--dark-300)">{errorMessage ?? 'No secrets yet. Add one to get started.'}</p>
